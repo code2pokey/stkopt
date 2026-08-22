@@ -62,7 +62,7 @@ const rowTemplate = (stock) => {
   const changeClass = stock.change >= 0 ? 'positive' : 'negative';
   return `<tr>
     <td class="stock-cell"><strong>${stock.symbol}</strong><span>${stock.name}</span></td>
-      <td class="price-cell"><span class="positive">${money(stock.price)}</span><small class="${changeClass}">${signedPercent(stock.change)}</small></td>
+      <td class="price-cell"><span class="${changeClass}">${money(stock.price)}</span><small class="${changeClass}">${signedPercent(stock.change)}</small></td>
       <td class="option-cell">${rowOptions(nextFriday.puts, stock.price)}</td>
       <td class="juice-cell">${juiceCell(stock)}</td>
       <td class="option-cell">${rowOptions(followingFriday.puts, stock.price)}</td>
