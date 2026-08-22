@@ -43,6 +43,10 @@ const nextFridayJuice = (stock) => {
   const downsideCushion = Math.max((stock.price - option.strike) / stock.price, 0);
   return premiumYield * (1 + downsideCushion);
 };
+const juiceCell = (stock) => {
+  const juice = nextFridayJuice(stock);
+  return juice == null ? '—' : `${(juice * 100).toFixed(2)}%`;
+};
 const rowOption = (option, stockPrice) => option ? `<div class="option-main"><b>${money(option.premium)}</b><em>/</em>${money(option.strike)}</div><span class="option-underlying">// ${money(stockPrice)} // ${signedPercent(((stockPrice - option.strike) / option.strike) * 100)} away</span><span class="option-change ${option.change >= 0 ? 'positive' : 'negative'}">${signedPercent(option.change)} day</span>` : '<span class="option-empty">No chain</span>';
 const rowTemplate = (stock) => {
   const options = stock.options || {};
@@ -53,6 +57,7 @@ const rowTemplate = (stock) => {
     <td class="stock-cell"><strong>${stock.symbol}</strong><span>${stock.name}</span></td>
       <td class="price-cell"><span class="positive">${money(stock.price)}</span><small class="${changeClass}">${signedPercent(stock.change)}</small></td>
       <td class="option-cell">${rowOption(nextFriday.puts, stock.price)}</td>
+      <td class="juice-cell"><span>${juiceCell(stock)}</span><small>rank</small></td>
       <td class="option-cell">${rowOption(followingFriday.puts, stock.price)}</td>
       <td class="metric-cell"><span class="${movingClass(stock.price, stock.moving15)}">${money(stock.moving15)}</span><small class="${movingClass(stock.price, stock.moving15)}">${movingDistance(stock.price, stock.moving15)}</small></td>
       <td class="metric-cell"><span class="${movingClass(stock.price, stock.moving30)}">${money(stock.moving30)}</span><small class="${movingClass(stock.price, stock.moving30)}">${movingDistance(stock.price, stock.moving30)}</small></td>
@@ -63,7 +68,7 @@ const rowTemplate = (stock) => {
 };
 
 function renderLoading(symbol) {
-  list.insertAdjacentHTML('beforeend', `<tr class="loading" data-loading="${symbol}"><td class="stock-cell"><strong>${symbol}</strong><span>Loading market data...</span></td><td colspan="7"><div class="loading-bar"></div></td><td></td></tr>`);
+  list.insertAdjacentHTML('beforeend', `<tr class="loading" data-loading="${symbol}"><td class="stock-cell"><strong>${symbol}</strong><span>Loading market data...</span></td><td colspan="8"><div class="loading-bar"></div></td><td></td></tr>`);
 }
 
 async function loadSymbol(symbol) {
@@ -76,7 +81,7 @@ async function loadSymbol(symbol) {
     loading.outerHTML = rowTemplate(data);
   } catch (error) {
     const loading = list.querySelector(`[data-loading="${symbol}"]`);
-    if (loading) loading.outerHTML = `<tr class="error-row"><td colspan="9">${symbol}: ${error.message}. Check the ticker and refresh.</td></tr>`;
+    if (loading) loading.outerHTML = `<tr class="error-row"><td colspan="10">${symbol}: ${error.message}. Check the ticker and refresh.</td></tr>`;
   }
 }
 
@@ -106,7 +111,7 @@ async function loadAll() {
   });
   list.innerHTML = results.map((result) => result.data
     ? rowTemplate(result.data)
-    : `<tr class="error-row"><td colspan="9">${result.symbol}: ${result.error}. Check the ticker and refresh.</td></tr>`
+    : `<tr class="error-row"><td colspan="10">${result.symbol}: ${result.error}. Check the ticker and refresh.</td></tr>`
   ).join('');
   lastRefresh.textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
