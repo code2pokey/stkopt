@@ -36,6 +36,13 @@ const movingDistance = (price, average) => {
   return `${money(Math.abs(price - average))} / ${signedPercent(((price - average) / average) * 100)}`;
 };
 const movingClass = (price, average) => !price || !average ? '' : price >= average ? 'positive' : 'negative';
+const nextFridayJuice = (stock) => {
+  const option = stock?.options?.nextFriday?.puts;
+  if (!stock?.price || !option?.strike || !option?.premium) return null;
+  const premiumYield = option.premium / option.strike;
+  const downsideCushion = Math.max((stock.price - option.strike) / stock.price, 0);
+  return premiumYield * (1 + downsideCushion);
+};
 const rowOption = (option, stockPrice) => option ? `<div class="option-main"><b>${money(option.premium)}</b><em>/</em>${money(option.strike)}</div><span class="option-underlying">// ${money(stockPrice)} // ${signedPercent(((stockPrice - option.strike) / option.strike) * 100)} away</span><span class="option-change ${option.change >= 0 ? 'positive' : 'negative'}">${signedPercent(option.change)} day</span>` : '<span class="option-empty">No chain</span>';
 const rowTemplate = (stock) => {
   const options = stock.options || {};
@@ -89,12 +96,12 @@ async function loadAll() {
     }
   }));
   results.sort((left, right) => {
-    const leftStrike = left.data?.options?.nextFriday?.puts?.strike;
-    const rightStrike = right.data?.options?.nextFriday?.puts?.strike;
-    if (leftStrike == null && rightStrike == null) return 0;
-    if (leftStrike == null) return 1;
-    if (rightStrike == null) return -1;
-    return leftStrike - rightStrike;
+    const leftJuice = nextFridayJuice(left.data);
+    const rightJuice = nextFridayJuice(right.data);
+    if (leftJuice == null && rightJuice == null) return 0;
+    if (leftJuice == null) return 1;
+    if (rightJuice == null) return -1;
+    return rightJuice - leftJuice;
   });
   list.innerHTML = results.map((result) => result.data
     ? rowTemplate(result.data)
