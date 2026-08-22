@@ -50,7 +50,8 @@ const rowTemplate = (stock) => {
   const followingFriday = options.followingFriday || {};
   const changeClass = stock.change >= 0 ? 'positive' : 'negative';
   return `<tr>
-    <td class="stock-cell"><strong>${stock.symbol}</strong><span>${stock.name}</span><div class="stock-price"><span class="positive">${money(stock.price)}</span> <small class="${changeClass}">${signedPercent(stock.change)}</small></div></td>
+    <td class="stock-cell"><strong>${stock.symbol}</strong><span>${stock.name}</span></td>
+      <td class="price-cell"><span class="positive">${money(stock.price)}</span><small class="${changeClass}">${signedPercent(stock.change)}</small></td>
       <td class="option-cell">${rowOption(nextFriday.puts, stock.price)}</td>
       <td class="option-cell">${rowOption(followingFriday.puts, stock.price)}</td>
       <td class="metric-cell"><span class="${movingClass(stock.price, stock.moving15)}">${money(stock.moving15)}</span><small class="${movingClass(stock.price, stock.moving15)}">${movingDistance(stock.price, stock.moving15)}</small></td>
@@ -62,7 +63,7 @@ const rowTemplate = (stock) => {
 };
 
 function renderLoading(symbol) {
-  list.insertAdjacentHTML('beforeend', `<tr class="loading" data-loading="${symbol}"><td class="stock-cell"><strong>${symbol}</strong><span>Loading market data...</span></td><td colspan="6"><div class="loading-bar"></div></td><td></td></tr>`);
+  list.insertAdjacentHTML('beforeend', `<tr class="loading" data-loading="${symbol}"><td class="stock-cell"><strong>${symbol}</strong><span>Loading market data...</span></td><td colspan="7"><div class="loading-bar"></div></td><td></td></tr>`);
 }
 
 async function loadSymbol(symbol) {
@@ -75,7 +76,7 @@ async function loadSymbol(symbol) {
     loading.outerHTML = rowTemplate(data);
   } catch (error) {
     const loading = list.querySelector(`[data-loading="${symbol}"]`);
-    if (loading) loading.outerHTML = `<tr class="error-row"><td colspan="8">${symbol}: ${error.message}. Check the ticker and refresh.</td></tr>`;
+    if (loading) loading.outerHTML = `<tr class="error-row"><td colspan="9">${symbol}: ${error.message}. Check the ticker and refresh.</td></tr>`;
   }
 }
 
@@ -105,7 +106,7 @@ async function loadAll() {
   });
   list.innerHTML = results.map((result) => result.data
     ? rowTemplate(result.data)
-    : `<tr class="error-row"><td colspan="8">${result.symbol}: ${result.error}. Check the ticker and refresh.</td></tr>`
+    : `<tr class="error-row"><td colspan="9">${result.symbol}: ${result.error}. Check the ticker and refresh.</td></tr>`
   ).join('');
   lastRefresh.textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
