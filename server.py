@@ -39,6 +39,28 @@ def cboe_json(symbol):
         return json.loads(response.read().decode("utf-8"))
 
 
+def finnhub_earnings(symbol):
+    api_key = os.environ.get("FINNHUB_API_KEY")
+    if not api_key:
+        return None
+    start = datetime.now().date()
+    end = start + timedelta(days=365)
+    query = urllib.parse.urlencode({
+        "symbol": symbol,
+        "from": start.isoformat(),
+        "to": end.isoformat(),
+        "token": api_key,
+    })
+    request = urllib.request.Request(
+        "https://finnhub.io/api/v1/calendar/earnings?" + query,
+        headers=YAHOO_HEADERS,
+    )
+    with urllib.request.urlopen(request, timeout=15) as response:
+        calendar = json.loads(response.read().decode("utf-8"))
+    earnings = calendar.get("earningsCalendar", [])
+    return earnings[0].get("date") if earnings else None
+
+
 def closest_option(options, target_ratio):
     if not options:
         return None
@@ -82,7 +104,7 @@ def cboe_option_view(option):
     }
 
 
-def fetch_stock(symbol):
+def fetch_stock(symbol, target_percent=1.0):
     symbol = symbol.upper().strip()
     encoded = urllib.parse.quote(symbol)
     chart_url = (
@@ -129,18 +151,22 @@ def fetch_stock(symbol):
         calls = [row for row in parsed_rows if row["expiration_date"] == expiration and row["type"] == "C"]
         puts = [row for row in parsed_rows if row["expiration_date"] == expiration and row["type"] == "P"]
         options[str(days)] = {
-            "calls": cboe_option_view(closest_option(calls, 0.01)) if calls else None,
-            "puts": cboe_option_view(closest_option(puts, 0.01)) if puts else None,
+            "calls": cboe_option_view(closest_option(calls, target_percent / 100)) if calls else None,
+            "puts": cboe_option_view(closest_option(puts, target_percent / 100)) if puts else None,
             "date": expiration.strftime("%b %-d") if expiration else None,
         }
 
-    earnings = None
     try:
-        summary_url = "https://query1.finance.yahoo.com/v10/finance/quoteSummary/" + encoded + "?modules=calendarEvents"
-        calendar = yahoo_json(summary_url)["quoteSummary"]["result"][0].get("calendarEvents", {})
-        earnings_dates = calendar.get("earnings", {}).get("earningsDate", [])
-        if earnings_dates:
-            earnings = earnings_dates[0].get("fmt") or earnings_dates[0].get("raw")
+        earnings = finnhub_earnings(symbol)
+    except Exception:
+        earnings = None
+    try:
+        if earnings is None:
+            summary_url = "https://query1.finance.yahoo.com/v10/finance/quoteSummary/" + encoded + "?modules=calendarEvents"
+            calendar = yahoo_json(summary_url)["quoteSummary"]["result"][0].get("calendarEvents", {})
+            earnings_dates = calendar.get("earnings", {}).get("earningsDate", [])
+            if earnings_dates:
+                earnings = earnings_dates[0].get("fmt") or earnings_dates[0].get("raw")
     except Exception:
         earnings = None
 
@@ -162,8 +188,9 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == "/api/stock":
             symbol = urllib.parse.parse_qs(parsed.query).get("symbol", [""])[0]
+            target = urllib.parse.parse_qs(parsed.query).get("target", ["1.0"])[0]
             try:
-                payload = fetch_stock(symbol)
+                payload = fetch_stock(symbol, float(target))
                 body = json.dumps(payload).encode("utf-8")
                 self.send_response(200)
             except Exception as error:

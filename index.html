@@ -3,33 +3,32 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Stockoption Watchlist</title>
+  <title>Stkopt Watchlist</title>
   <link rel="stylesheet" href="styles.css">
   <script src="app.js" defer></script>
 </head>
 <body>
   <header class="topbar">
-    <div class="brand"><span class="brand-mark">↗</span><span>stockoption</span></div>
-    <div class="data-note"><span class="live-dot"></span> Yahoo quotes · Cboe options · delayed</div>
+    <div class="brand"><span class="brand-mark">↗</span><span>stkopt</span></div>
+    <div class="data-note"><span class="live-dot"></span> Yahoo quotes · Cboe opts · delayed</div>
   </header>
   <main class="shell">
     <section class="intro">
       <div>
-        <p class="eyebrow">Options desk</p>
-        <h1>Find the 1% edge.</h1>
-        <p class="lede">A focused view of your favorite stocks, their near-term options, and the signals around them.</p>
+        <p class="eyebrow">Opt desk</p>
+        <p class="lede">A focused view of your favorite stks, their near-term opts, and the signals around them.</p>
       </div>
-      <div class="target-badge"><span>Target premium / strike</span><strong>1.00%</strong></div>
+      <label class="target-badge" for="target-select"><span>Target prm/strik</span><select id="target-select" aria-label="Target premium to strike percentage"></select></label>
     </section>
 
     <section class="toolbar" aria-label="Watchlist controls">
       <form id="add-form" class="add-form">
         <label class="sr-only" for="symbol-input">Ticker symbol</label>
         <input id="symbol-input" maxlength="8" placeholder="Add ticker, e.g. AAPL" autocomplete="off">
-        <button type="submit"><span>+</span> Add stock</button>
+        <button type="submit"><span>+</span> Add stk</button>
       </form>
       <div class="toolbar-actions">
-        <span id="watch-count">0 stocks</span>
+        <span id="watch-count">0 stks</span>
         <button id="refresh" class="icon-button" type="button" title="Refresh watchlist" aria-label="Refresh watchlist">↻</button>
       </div>
     </section>
@@ -38,16 +37,16 @@
       <table>
         <thead>
           <tr>
-            <th class="stock-head">Stock</th>
-            <th class="group-head"><span>7 DTE Put</span><small>exp. date</small></th>
-            <th class="group-head"><span>14 DTE Put</span><small>exp. date</small></th>
-            <th class="single-head">Earnings</th>
-            <th class="single-head">50D MA</th>
-            <th class="single-head">100D MA</th>
+            <th class="stock-head">Stk</th>
+            <th class="group-head"><span>7 DP</span><small>exp. date</small></th>
+            <th class="group-head"><span>14 DP</span><small>exp. date</small></th>
+            <th class="single-head">Erngs</th>
+            <th class="single-head">50</th>
+            <th class="single-head">100</th>
             <th class="action-head"></th>
           </tr>
           <tr class="subhead">
-            <th></th><th>Premium / strike</th><th>Premium / strike</th><th></th><th></th><th></th><th></th>
+            <th></th><th>prm/strik</th><th>prm/strik</th><th></th><th></th><th></th><th></th>
           </tr>
         </thead>
         <tbody id="watchlist"></tbody>
@@ -55,7 +54,7 @@
       <div id="empty-state" class="empty-state">
         <div class="empty-icon">＋</div>
         <h2>Your watchlist is quiet.</h2>
-        <p>Add a ticker above to see its 1% premium-to-strike options.</p>
+        <p>Add a ticker above to see its 1% premium-to-strike opts.</p>
       </div>
     </section>
     <footer><span>Prices are delayed and for research only.</span><span>Last refresh <strong id="last-refresh">—</strong></span></footer>
