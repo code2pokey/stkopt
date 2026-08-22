@@ -41,7 +41,7 @@ const nextFridayJuice = (stock) => {
   if (!stock?.price || !option?.strike || !option?.premium) return null;
   const premiumYield = option.premium / option.strike;
   const downsideCushion = Math.max((stock.price - option.strike) / stock.price, 0);
-  return premiumYield * (1 + downsideCushion);
+  return (premiumYield * (2 / 3)) + (downsideCushion * (1 / 3));
 };
 const juiceCell = (stock) => {
   const option = stock?.options?.nextFriday?.puts;
@@ -49,7 +49,7 @@ const juiceCell = (stock) => {
   if (juice == null) return '<span>—</span><small>No rank</small>';
   const premiumYield = (option.premium / option.strike) * 100;
   const downsideCushion = Math.max(((stock.price - option.strike) / stock.price) * 100, 0);
-  return `<span>${(juice * 100).toFixed(2)}%</span><small>${premiumYield.toFixed(2)}% x ${downsideCushion.toFixed(1)}% away</small>`;
+  return `<span>${(juice * 100).toFixed(2)}%</span><small>2/3 ${premiumYield.toFixed(2)}% + 1/3 ${downsideCushion.toFixed(1)}% away</small>`;
 };
 const rowOption = (option, stockPrice) => option ? `<div class="option-main"><b>${money(option.premium)}</b><em>/</em>${money(option.strike)}</div><span class="option-underlying">// ${money(stockPrice)} // ${signedPercent(((stockPrice - option.strike) / option.strike) * 100)} away</span><span class="option-change ${option.change >= 0 ? 'positive' : 'negative'}">${signedPercent(option.change)} day</span>` : '<span class="option-empty">No chain</span>';
 const rowTemplate = (stock) => {
