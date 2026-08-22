@@ -79,6 +79,21 @@ def cboe_option_view(option):
         "change": option.get("percent_change", 0) or 0,
         "volume": option.get("volume", 0) or 0,
         "ratio": (premium / strike) * 100 if strike else 0,
+        "openInterest": option.get("open_interest", 0) or 0,
+        "impliedVolatility": option.get("iv", 0) or 0,
+    }
+
+
+def qualifying_puts(puts, price):
+    valid_puts = [
+        put for put in puts
+        if (put.get("bid", 0) or 0) > 0
+        and (put.get("volume", 0) or 0) > 0
+        and (put.get("open_interest", 0) or 0) > 0
+    ]
+    nearest = min(valid_puts, key=lambda put: abs(put["strike"] - price)) if valid_puts else None
+    return {
+        "middle": cboe_option_view(nearest) if nearest else None,
     }
 
 
@@ -130,11 +145,9 @@ def fetch_stock(symbol, target_percent=1.0):
     expiration_dates = sorted({row["expiration_date"] for row in parsed_rows if row["expiration_date"] >= today})
     for key, target in target_expirations:
         expiration = min(expiration_dates, key=lambda value: abs(value - target)) if expiration_dates else None
-        calls = [row for row in parsed_rows if row["expiration_date"] == expiration and row["type"] == "C"]
         puts = [row for row in parsed_rows if row["expiration_date"] == expiration and row["type"] == "P"]
         options[key] = {
-            "calls": cboe_option_view(closest_option(calls, target_percent / 100)) if calls else None,
-            "puts": cboe_option_view(closest_option(puts, target_percent / 100)) if puts else None,
+            "puts": qualifying_puts(puts, price),
             "date": expiration.strftime("%b %-d") if expiration else None,
         }
 

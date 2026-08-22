@@ -37,21 +37,24 @@ const movingDistance = (price, average) => {
 };
 const movingClass = (price, average) => !price || !average ? '' : price >= average ? 'positive' : 'negative';
 const nextFridayJuice = (stock) => {
-  const option = stock?.options?.nextFriday?.puts;
+  const option = stock?.options?.nextFriday?.puts?.middle;
   if (!stock?.price || !option?.strike || !option?.premium) return null;
   const premiumYield = option.premium / option.strike;
   const downsideCushion = Math.max((stock.price - option.strike) / stock.price, 0);
   return (premiumYield * (2 / 3)) + (downsideCushion * (1 / 3));
 };
 const juiceCell = (stock) => {
-  const option = stock?.options?.nextFriday?.puts;
+  const option = stock?.options?.nextFriday?.puts?.middle;
   const juice = nextFridayJuice(stock);
   if (juice == null) return '<span>—</span><small>No rank</small>';
   const premiumYield = (option.premium / option.strike) * 100;
   const downsideCushion = Math.max(((stock.price - option.strike) / stock.price) * 100, 0);
   return `<span>${(juice * 100).toFixed(2)}%</span><small>2/3 ${premiumYield.toFixed(2)}% + 1/3 ${downsideCushion.toFixed(1)}% away</small>`;
 };
-const rowOption = (option, stockPrice) => option ? `<div class="option-main"><b>${money(option.premium)}</b><em>/</em>${money(option.strike)}</div><span class="option-underlying">// ${money(stockPrice)} // ${signedPercent(((stockPrice - option.strike) / option.strike) * 100)} away</span><span class="option-change ${option.change >= 0 ? 'positive' : 'negative'}">${signedPercent(option.change)} day</span>` : '<span class="option-empty">No chain</span>';
+const rowOption = (option, stockPrice) => `<div class="put-line"><span class="option-main"><b>${money(option.premium)}</b><em>/</em>${money(option.strike)}</span><span class="option-underlying">// ${money(stockPrice)} // ${signedPercent(((stockPrice - option.strike) / option.strike) * 100)} away</span><span class="option-stats">V ${Number(option.volume).toLocaleString()} · OI ${Number(option.openInterest).toLocaleString()} · IV ${signedPercent(option.impliedVolatility * 100)}</span></div>`;
+const rowOptions = (puts, stockPrice) => {
+  return puts?.middle ? rowOption(puts.middle, stockPrice) : '<span class="option-empty">No qualifying put</span>';
+};
 const rowTemplate = (stock) => {
   const options = stock.options || {};
   const nextFriday = options.nextFriday || {};
@@ -60,9 +63,9 @@ const rowTemplate = (stock) => {
   return `<tr>
     <td class="stock-cell"><strong>${stock.symbol}</strong><span>${stock.name}</span></td>
       <td class="price-cell"><span class="positive">${money(stock.price)}</span><small class="${changeClass}">${signedPercent(stock.change)}</small></td>
-      <td class="option-cell">${rowOption(nextFriday.puts, stock.price)}</td>
+      <td class="option-cell">${rowOptions(nextFriday.puts, stock.price)}</td>
       <td class="juice-cell">${juiceCell(stock)}</td>
-      <td class="option-cell">${rowOption(followingFriday.puts, stock.price)}</td>
+      <td class="option-cell">${rowOptions(followingFriday.puts, stock.price)}</td>
       <td class="metric-cell"><span class="${movingClass(stock.price, stock.moving15)}">${money(stock.moving15)}</span><small class="${movingClass(stock.price, stock.moving15)}">${movingDistance(stock.price, stock.moving15)}</small></td>
       <td class="metric-cell"><span class="${movingClass(stock.price, stock.moving30)}">${money(stock.moving30)}</span><small class="${movingClass(stock.price, stock.moving30)}">${movingDistance(stock.price, stock.moving30)}</small></td>
       <td class="metric-cell"><span class="${movingClass(stock.price, stock.moving50)}">${money(stock.moving50)}</span><small class="${movingClass(stock.price, stock.moving50)}">${movingDistance(stock.price, stock.moving50)}</small></td>

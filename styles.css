@@ -1,6 +1,11 @@
-.option-main b { color:var(--ink); font-weight:500; }.option-main em { margin: 0 3px; color:#b5c0b8; font-style:normal; }.option-underlying { display:block; margin-top: 7px; color: var(--muted); font: 10px 'DM Mono', monospace; white-space:nowrap; }.option-change { display:block; margin-top: 7px; font: 11px 'DM Mono', monospace; }.option-empty { color: #a9b4ac; font: 12px 'DM Mono', monospace; }
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
+/* Compact grouped put quotes. */
+.put-line { padding: 4px 0 6px; border-bottom: 1px solid #edf1ed; white-space: nowrap; }
+.put-line:last-child { border-bottom: 0; }
+.option-underlying, .option-stats { display: block; margin-top: 3px; color: var(--muted); font: 10px 'DM Mono', monospace; white-space: nowrap; }
+.option-cell .option-stats { display: block; margin-top: 7px; color: var(--muted); font: 10px 'DM Mono', monospace; white-space: nowrap; }
+.option-main b { color:var(--ink); font-weight:500; }.option-main em { margin: 0 3px; color:#b5c0b8; font-style:normal; }.option-underlying { display:block; margin-top: 7px; color: var(--muted); font: 10px 'DM Mono', monospace; white-space:nowrap; }.option-change { display:block; margin-top: 7px; font: 11px 'DM Mono', monospace; }.option-empty { color: #a9b4ac; font: 12px 'DM Mono', monospace; }
 :root { --ink: #18211f; --muted: #71807a; --line: #dbe4dc; --paper: #f4f6f1; --card: #fbfcf8; --green: #166b4b; --mint: #d9eee0; --red: #bf5549; --gold: #c88a38; }
 * { box-sizing: border-box; }
 body { margin: 0; color: var(--ink); background: var(--paper); font-family: 'Space Grotesk', sans-serif; background-image: radial-gradient(#dce5dd 0.7px, transparent 0.7px); background-size: 18px 18px; }
