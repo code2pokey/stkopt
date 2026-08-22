@@ -10,4 +10,4 @@ Requires Python 3.9+.
 python3 server.py
 ```
 
-Open http://localhost:8000. Add ticker symbols to persist them in your browser. Quotes are from Yahoo Finance; delayed options are from Cboe. To enable earnings dates, create a free Finnhub account, set `FINNHUB_API_KEY`, and then run `python3 server.py`. Data may be delayed or rate-limited.
+Open http://localhost:8000. Add ticker symbols to persist them in your browser. Quotes are from Yahoo Finance; delayed options are from Cboe. Data may be delayed or rate-limited.

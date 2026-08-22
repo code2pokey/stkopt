@@ -39,28 +39,6 @@ def cboe_json(symbol):
         return json.loads(response.read().decode("utf-8"))
 
 
-def finnhub_earnings(symbol):
-    api_key = os.environ.get("FINNHUB_API_KEY")
-    if not api_key:
-        return None
-    start = datetime.now().date()
-    end = start + timedelta(days=365)
-    query = urllib.parse.urlencode({
-        "symbol": symbol,
-        "from": start.isoformat(),
-        "to": end.isoformat(),
-        "token": api_key,
-    })
-    request = urllib.request.Request(
-        "https://finnhub.io/api/v1/calendar/earnings?" + query,
-        headers=YAHOO_HEADERS,
-    )
-    with urllib.request.urlopen(request, timeout=15) as response:
-        calendar = json.loads(response.read().decode("utf-8"))
-    earnings = calendar.get("earningsCalendar", [])
-    return earnings[0].get("date") if earnings else None
-
-
 def closest_option(options, target_ratio):
     if not options:
         return None
@@ -144,31 +122,21 @@ def fetch_stock(symbol, target_percent=1.0):
     except Exception:
         parsed_rows = []
 
-    for days in (7, 14):
-        target = today + timedelta(days=days)
-        expiration_dates = sorted({row["expiration_date"] for row in parsed_rows if row["expiration_date"] >= today})
+    days_to_friday = (4 - today.weekday()) % 7 or 7
+    target_expirations = (
+        ("nextFriday", today + timedelta(days=days_to_friday)),
+        ("followingFriday", today + timedelta(days=days_to_friday + 7)),
+    )
+    expiration_dates = sorted({row["expiration_date"] for row in parsed_rows if row["expiration_date"] >= today})
+    for key, target in target_expirations:
         expiration = min(expiration_dates, key=lambda value: abs(value - target)) if expiration_dates else None
         calls = [row for row in parsed_rows if row["expiration_date"] == expiration and row["type"] == "C"]
         puts = [row for row in parsed_rows if row["expiration_date"] == expiration and row["type"] == "P"]
-        options[str(days)] = {
+        options[key] = {
             "calls": cboe_option_view(closest_option(calls, target_percent / 100)) if calls else None,
             "puts": cboe_option_view(closest_option(puts, target_percent / 100)) if puts else None,
             "date": expiration.strftime("%b %-d") if expiration else None,
         }
-
-    try:
-        earnings = finnhub_earnings(symbol)
-    except Exception:
-        earnings = None
-    try:
-        if earnings is None:
-            summary_url = "https://query1.finance.yahoo.com/v10/finance/quoteSummary/" + encoded + "?modules=calendarEvents"
-            calendar = yahoo_json(summary_url)["quoteSummary"]["result"][0].get("calendarEvents", {})
-            earnings_dates = calendar.get("earnings", {}).get("earningsDate", [])
-            if earnings_dates:
-                earnings = earnings_dates[0].get("fmt") or earnings_dates[0].get("raw")
-    except Exception:
-        earnings = None
 
     return {
         "symbol": symbol,
@@ -176,9 +144,10 @@ def fetch_stock(symbol, target_percent=1.0):
         "price": price,
         "change": meta.get("regularMarketChangePercent", 0) or 0,
         "currency": meta.get("currency", "USD"),
+        "moving15": average(15),
+        "moving30": average(30),
         "moving50": average(50),
         "moving100": average(100),
-        "earnings": earnings,
         "options": options,
     }
 

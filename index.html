@@ -16,7 +16,6 @@
     <section class="intro">
       <div>
         <p class="eyebrow">Opt desk</p>
-        <p class="lede">A focused view of your favorite stks, their near-term opts, and the signals around them.</p>
       </div>
       <label class="target-badge" for="target-select"><span>Target prm/strik</span><select id="target-select" aria-label="Target premium to strike percentage"></select></label>
     </section>
@@ -38,15 +37,13 @@
         <thead>
           <tr>
             <th class="stock-head">Stk</th>
-            <th class="group-head"><span>7 DP</span><small>exp. date</small></th>
-            <th class="group-head"><span>14 DP</span><small>exp. date</small></th>
-            <th class="single-head">Erngs</th>
+            <th class="group-head"><span id="next-friday-date"></span></th>
+            <th class="group-head"><span id="following-friday-date"></span></th>
+            <th class="single-head">15</th>
+            <th class="single-head">30</th>
             <th class="single-head">50</th>
             <th class="single-head">100</th>
             <th class="action-head"></th>
-          </tr>
-          <tr class="subhead">
-            <th></th><th>prm/strik</th><th>prm/strik</th><th></th><th></th><th></th><th></th>
           </tr>
         </thead>
         <tbody id="watchlist"></tbody>
