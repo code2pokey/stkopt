@@ -7,7 +7,7 @@ const lastRefresh = document.querySelector('#last-refresh');
 const targetSelect = document.querySelector('#target-select');
 const storageKey = 'stockoption-watchlist';
 const targetStorageKey = 'stockoption-target-percent';
-let symbols = JSON.parse(localStorage.getItem(storageKey) || '["OKLO", "IREN", "ASTS", "INTC", "CBRS", "BE", "NVDA", "ALAB", "TSLA", "AAOI", "CRDO", "NBIS"]');
+let symbols = JSON.parse(localStorage.getItem(storageKey) || '["OKLO", "IREN", "ASTS", "INTC", "CBRS", "BE", "NVDA", "ALAB", "TSLA", "AAOI", "CRDO", "NBIS", "MRVL", "LUNR"]');
 let targetPercent = Number(localStorage.getItem(targetStorageKey) || '1.00');
 
 const nextFriday = new Date();
