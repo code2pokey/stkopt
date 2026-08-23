@@ -66,16 +66,19 @@ const rowTemplate = (stock) => {
       <td class="option-cell">${rowOptions(nextFriday.puts, stock.price)}</td>
       <td class="juice-cell">${juiceCell(stock)}</td>
       <td class="option-cell">${rowOptions(followingFriday.puts, stock.price)}</td>
-      <td class="metric-cell"><span class="${movingClass(stock.price, stock.moving15)}">${money(stock.moving15)}</span><small class="${movingClass(stock.price, stock.moving15)}">${movingDistance(stock.price, stock.moving15)}</small></td>
-      <td class="metric-cell"><span class="${movingClass(stock.price, stock.moving30)}">${money(stock.moving30)}</span><small class="${movingClass(stock.price, stock.moving30)}">${movingDistance(stock.price, stock.moving30)}</small></td>
-      <td class="metric-cell"><span class="${movingClass(stock.price, stock.moving50)}">${money(stock.moving50)}</span><small class="${movingClass(stock.price, stock.moving50)}">${movingDistance(stock.price, stock.moving50)}</small></td>
-      <td class="metric-cell"><span class="${movingClass(stock.price, stock.moving100)}">${money(stock.moving100)}</span><small class="${movingClass(stock.price, stock.moving100)}">${movingDistance(stock.price, stock.moving100)}</small></td>
+      <td class="metric-cell"><span class="${movingClass(stock.price, stock.moving15)}">${money(stock.moving15)}</span><small>${movingDistance(stock.price, stock.moving15)}</small></td>
+      <td class="metric-cell"><span class="${movingClass(stock.price, stock.moving30)}">${money(stock.moving30)}</span><small>${movingDistance(stock.price, stock.moving30)}</small></td>
+      <td class="metric-cell"><span class="${movingClass(stock.price, stock.moving50)}">${money(stock.moving50)}</span><small>${movingDistance(stock.price, stock.moving50)}</small></td>
+      <td class="metric-cell"><span class="${movingClass(stock.price, stock.moving70)}">${money(stock.moving70)}</span><small>${movingDistance(stock.price, stock.moving70)}</small></td>
+      <td class="metric-cell"><span class="${movingClass(stock.price, stock.moving90)}">${money(stock.moving90)}</span><small>${movingDistance(stock.price, stock.moving90)}</small></td>
+      <td class="metric-cell"><span class="${movingClass(stock.price, stock.moving100)}">${money(stock.moving100)}</span><small>${movingDistance(stock.price, stock.moving100)}</small></td>
+      <td class="metric-cell"><span class="${movingClass(stock.price, stock.moving120)}">${money(stock.moving120)}</span><small>${movingDistance(stock.price, stock.moving120)}</small></td>
     <td class="remove-cell"><button class="remove" data-symbol="${stock.symbol}" title="Remove ${stock.symbol}" aria-label="Remove ${stock.symbol}">×</button></td>
   </tr>`;
 };
 
 function renderLoading(symbol) {
-  list.insertAdjacentHTML('beforeend', `<tr class="loading" data-loading="${symbol}"><td class="stock-cell"><strong>${symbol}</strong><span>Loading market data...</span></td><td colspan="8"><div class="loading-bar"></div></td><td></td></tr>`);
+  list.insertAdjacentHTML('beforeend', `<tr class="loading" data-loading="${symbol}"><td class="stock-cell"><strong>${symbol}</strong><span>Loading market data...</span></td><td colspan="11"><div class="loading-bar"></div></td><td></td></tr>`);
 }
 
 async function loadSymbol(symbol) {
@@ -88,7 +91,7 @@ async function loadSymbol(symbol) {
     loading.outerHTML = rowTemplate(data);
   } catch (error) {
     const loading = list.querySelector(`[data-loading="${symbol}"]`);
-    if (loading) loading.outerHTML = `<tr class="error-row"><td colspan="10">${symbol}: ${error.message}. Check the ticker and refresh.</td></tr>`;
+    if (loading) loading.outerHTML = `<tr class="error-row"><td colspan="13">${symbol}: ${error.message}. Check the ticker and refresh.</td></tr>`;
   }
 }
 
@@ -118,7 +121,7 @@ async function loadAll() {
   });
   list.innerHTML = results.map((result) => result.data
     ? rowTemplate(result.data)
-    : `<tr class="error-row"><td colspan="10">${result.symbol}: ${result.error}. Check the ticker and refresh.</td></tr>`
+    : `<tr class="error-row"><td colspan="13">${result.symbol}: ${result.error}. Check the ticker and refresh.</td></tr>`
   ).join('');
   lastRefresh.textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }

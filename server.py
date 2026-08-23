@@ -164,7 +164,10 @@ def fetch_stock(symbol, target_percent=1.0):
         "moving15": average(15),
         "moving30": average(30),
         "moving50": average(50),
+        "moving70": average(70),
+        "moving90": average(90),
         "moving100": average(100),
+        "moving120": average(120),
         "options": options,
     }
 
