@@ -49,7 +49,7 @@ const juiceCell = (stock) => {
   if (juice == null) return '<span>—</span><small>No rank</small>';
   const premiumYield = option.premium;
   const downsideCushion = Math.max(((stock.price - option.strike) / stock.price) * 100, 0);
-  return `<span>${(juice * 100).toFixed(2)}%</span><small>2/3 ${premiumYield.toFixed(2)}% +  ${downsideCushion.toFixed(1)}% away</small>`;
+  return `<span>${(juice * 100).toFixed(2)}%</span><small>${premiumYield.toFixed(2)}% * ${downsideCushion.toFixed(1)}% away</small>`;
 };
 const rowOption = (option, stockPrice) => `<div class="put-line"><span class="option-main"><b>${money(option.premium)}</b><em>/</em>${money(option.strike)}</span><span class="option-underlying">// ${money(stockPrice)} // ${signedPercent(((stockPrice - option.strike) / option.strike) * 100)} away</span><span class="option-stats">V ${Number(option.volume).toLocaleString()} · OI ${Number(option.openInterest).toLocaleString()} · IV ${signedPercent(option.impliedVolatility * 100)} · R ${Number(option.ratio).toFixed(2)}%</span></div>`;
 const rowOptions = (puts, stockPrice) => {
