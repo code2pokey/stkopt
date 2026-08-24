@@ -118,10 +118,12 @@ def fetch_stock(symbol, target_percent=1.0):
         clean_closes[-1] if clean_closes else 0
     )
     
+    # For a one-year chart, chartPreviousClose is the close before the
+    # one-year window, not the previous trading day's close.
     previous_price = (
-        meta.get("previousClose")
-        or meta.get("chartPreviousClose")
-        or (clean_closes[-2] if len(clean_closes) >= 2 else 0)
+        clean_closes[-2]
+        if len(clean_closes) >= 2
+        else meta.get("chartPreviousClose", 0)
     )
     
     change_percent = (
@@ -167,7 +169,7 @@ def fetch_stock(symbol, target_percent=1.0):
         puts = [row for row in parsed_rows if row["expiration_date"] == expiration and row["type"] == "P"]
         options[key] = {
             "puts": qualifying_puts(puts, target_percent),
-            "date": expiration.strftime("%b %-d") if expiration else None,
+            "date": f"{expiration:%b} {expiration.day}" if expiration else None,
         }
 
     return {
