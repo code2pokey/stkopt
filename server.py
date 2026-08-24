@@ -113,11 +113,26 @@ def fetch_stock(symbol, target_percent=1.0):
     timestamps = chart_payload.get("timestamp", [])
     closes = chart_payload.get("indicators", {}).get("quote", [{}])[0].get("close", [])
     clean_closes = [value for value in closes if value is not None]
-    price = meta.get("regularMarketPrice") or (clean_closes[-1] if clean_closes else 0)
+    
+    price = meta.get("regularMarketPrice") or (
+        clean_closes[-1] if clean_closes else 0
+    )
+    
+    previous_price = (
+        meta.get("previousClose")
+        or meta.get("chartPreviousClose")
+        or (clean_closes[-2] if len(clean_closes) >= 2 else 0)
+    )
+    
+    change_percent = (
+        ((price - previous_price) / previous_price) * 100
+        if previous_price
+        else 0
+    )
 
-    def average(period):
-        values = clean_closes[-period:]
-        return sum(values) / len(values) if values else None
+def average(period):
+    values = clean_closes[-period:]
+    return sum(values) / len(values) if values else None
 
     today = datetime.now().date()
     options = {}
@@ -159,7 +174,7 @@ def fetch_stock(symbol, target_percent=1.0):
         "symbol": symbol,
         "name": meta.get("longName") or meta.get("shortName") or symbol,
         "price": price,
-        "change": meta.get("regularMarketChangePercent", 0) or 0,
+        "change": change_percent,
         "currency": meta.get("currency", "USD"),
         "moving15": average(15),
         "moving30": average(30),
