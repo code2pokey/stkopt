@@ -130,9 +130,9 @@ def fetch_stock(symbol, target_percent=1.0):
         else 0
     )
 
-def average(period):
-    values = clean_closes[-period:]
-    return sum(values) / len(values) if values else None
+    def average(period):
+        values = clean_closes[-period:]
+        return sum(values) / len(values) if values else None
 
     today = datetime.now().date()
     options = {}
