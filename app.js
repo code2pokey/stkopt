@@ -31,6 +31,13 @@ const signedPercent = (value) => {
   const number = Number(value);
   return `${number >= 0 ? '+' : ''}${number.toFixed(2)}%`;
 };
+
+const signedMoney = (value) => {
+  if (value == null || Number.isNaN(Number(value))) return '—';
+  const number = Number(value);
+  return `${number >= 0 ? '+' : '-'}$${Math.abs(number).toFixed(2)}`;
+};
+
 const movingDistance = (price, average) => {
   if (!price || !average) return '—';
   return `${money(Math.abs(price - average))} / ${signedPercent(((price - average) / average) * 100)}`;
@@ -62,7 +69,7 @@ const rowTemplate = (stock) => {
   const changeClass = stock.change >= 0 ? 'positive' : 'negative';
   return `<tr>
     <td class="stock-cell"><strong>${stock.symbol}</strong><span>${stock.name}</span></td>
-      <td class="price-cell"><span class="${changeClass}">${money(stock.price)}</span><small class="${changeClass}">${signedPercent(stock.change)}</small></td>
+      <td class="price-cell"><span class="${changeClass}">${money(stock.price)}</span><small class="${changeClass}">${signedMoney(stock.priceChange)} / ${signedPercent(stock.change)}</small></td>
       <td class="option-cell">${rowOptions(nextFriday.puts, stock.price)}</td>
       <td class="juice-cell">${juiceCell(stock)}</td>
       <td class="option-cell">${rowOptions(followingFriday.puts, stock.price)}</td>
