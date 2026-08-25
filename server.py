@@ -131,6 +131,7 @@ def fetch_stock(symbol, target_percent=1.0):
         if previous_price
         else 0
     )
+    price_change = price - previous_price if previous_price else 0
 
     def average(period):
         values = clean_closes[-period:]
@@ -176,6 +177,7 @@ def fetch_stock(symbol, target_percent=1.0):
         "symbol": symbol,
         "name": meta.get("longName") or meta.get("shortName") or symbol,
         "price": price,
+        "priceChange": price_change,
         "change": change_percent,
         "currency": meta.get("currency", "USD"),
         "moving15": average(15),
