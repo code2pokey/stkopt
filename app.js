@@ -7,8 +7,12 @@ const lastRefresh = document.querySelector('#last-refresh');
 const targetSelect = document.querySelector('#target-select');
 const storageKey = 'stockoption-watchlist';
 const targetStorageKey = 'stockoption-target-percent';
+const juiceSortStorageKey = 'stockoption-juice-sort-expiration';
 let symbols = JSON.parse(localStorage.getItem(storageKey) || '["OKLO", "IREN", "ASTS", "INTC", "CBRS", "BE", "NVDA", "ALAB", "TSLA", "AAOI", "CRDO", "NBIS", "MRVL", "LUNR"]');
 let targetPercent = Number(localStorage.getItem(targetStorageKey) || '1.00');
+let juiceSortExpiration = localStorage.getItem(juiceSortStorageKey) === 'followingFriday'
+  ? 'followingFriday'
+  : 'nextFriday';
 
 const nextFriday = new Date();
 const daysToFriday = (5 - nextFriday.getDay() + 7) % 7 || 7;
@@ -18,6 +22,22 @@ followingFriday.setDate(followingFriday.getDate() + 7);
 const formatFriday = (date) => `${date.toLocaleDateString('en-US', { month: 'short' })}-${String(date.getDate()).padStart(2, '0')}`;
 document.querySelector('#next-friday-date').textContent = formatFriday(nextFriday);
 document.querySelector('#following-friday-date').textContent = formatFriday(followingFriday);
+
+const followingFridayHeader = document.querySelector('#following-friday-date').closest('th');
+if (followingFridayHeader && !document.querySelector('#following-friday-juice-header')) {
+  followingFridayHeader.insertAdjacentHTML('afterend', '<th id="following-friday-juice-header">JUICE</th>');
+}
+
+const sortControl = document.createElement('label');
+sortControl.className = targetSelect.closest('label')?.className || '';
+sortControl.innerHTML = `Sort by
+  <select id="juice-sort-select" aria-label="JUICE column used to sort stocks">
+    <option value="nextFriday">First JUICE</option>
+    <option value="followingFriday">Second JUICE</option>
+  </select>`;
+(targetSelect.closest('label') || targetSelect).insertAdjacentElement('afterend', sortControl);
+const juiceSortSelect = document.querySelector('#juice-sort-select');
+juiceSortSelect.value = juiceSortExpiration;
 
 for (let value = 0.1; value <= 5; value += 0.1) {
   const percent = value.toFixed(2);
@@ -43,19 +63,19 @@ const movingDistance = (price, average) => {
   return `${money(Math.abs(price - average))} / ${signedPercent(((price - average) / average) * 100)}`;
 };
 const movingClass = (price, average) => !price || !average ? '' : price >= average ? 'positive' : 'negative';
-const nextFridayJuice = (stock) => {
-  const option = stock?.options?.nextFriday?.puts?.middle;
+const optionJuice = (stock, expirationKey) => {
+  const option = stock?.options?.[expirationKey]?.puts?.middle;
   if (!stock?.price || !option?.strike || !option?.premium) return null;
   const premiumYield = option.premium / option.strike;
   const downsideCushion = Math.max((stock.price - option.strike) / stock.price, 0);
   return (premiumYield * (2 / 3)) + (downsideCushion * (1 / 3));
 };
-const juiceCell = (stock) => {
-  const option = stock?.options?.nextFriday?.puts?.middle;
-  const juice = nextFridayJuice(stock);
+const juiceCell = (stock, expirationKey) => {
+  const option = stock?.options?.[expirationKey]?.puts?.middle;
+  const juice = optionJuice(stock, expirationKey);
   if (juice == null) return '<span>—</span><small>No rank</small>';
   const downsideCushion = Math.max(((stock.price - option.strike) / stock.price) * 100, 0);
-  return `<span>${(juice * 100).toFixed(2)}%</span><small>${money(option.premium)} premium · ${downsideCushion.toFixed(1)}% below spot</small>`;
+  return `<span>${(juice * 100).toFixed(2)}%</span><small>${money(option.premium)} * ${downsideCushion.toFixed(1)}% below</small>`;
 };
 const rowOption = (option, stockPrice) => `<div class="put-line"><span class="option-main"><b>${money(option.premium)}</b><em>/</em>${money(option.strike)}</span><span class="option-underlying">// ${money(stockPrice)} // ${signedPercent(((stockPrice - option.strike) / option.strike) * 100)} away</span><span class="option-stats">V ${Number(option.volume).toLocaleString()} · OI ${Number(option.openInterest).toLocaleString()} · IV ${signedPercent(option.impliedVolatility * 100)} · R ${Number(option.ratio).toFixed(2)}%</span></div>`;
 const rowOptions = (puts, stockPrice) => {
@@ -70,8 +90,9 @@ const rowTemplate = (stock) => {
     <td class="stock-cell"><strong>${stock.symbol}</strong><span>${stock.name}</span></td>
       <td class="price-cell"><span class="${changeClass}">${money(stock.price)}</span><small class="${changeClass}">${signedMoney(stock.priceChange)} / ${signedPercent(stock.change)}</small></td>
       <td class="option-cell">${rowOptions(nextFriday.puts, stock.price)}</td>
-      <td class="juice-cell">${juiceCell(stock)}</td>
+      <td class="juice-cell">${juiceCell(stock, 'nextFriday')}</td>
       <td class="option-cell">${rowOptions(followingFriday.puts, stock.price)}</td>
+      <td class="juice-cell">${juiceCell(stock, 'followingFriday')}</td>
       <td class="metric-cell"><span class="${movingClass(stock.price, stock.moving15)}">${money(stock.moving15)}</span><small>${movingDistance(stock.price, stock.moving15)}</small></td>
       <td class="metric-cell"><span class="${movingClass(stock.price, stock.moving30)}">${money(stock.moving30)}</span><small>${movingDistance(stock.price, stock.moving30)}</small></td>
       <td class="metric-cell"><span class="${movingClass(stock.price, stock.moving50)}">${money(stock.moving50)}</span><small>${movingDistance(stock.price, stock.moving50)}</small></td>
@@ -84,7 +105,7 @@ const rowTemplate = (stock) => {
 };
 
 function renderLoading(symbol) {
-  list.insertAdjacentHTML('beforeend', `<tr class="loading" data-loading="${symbol}"><td class="stock-cell"><strong>${symbol}</strong><span>Loading market data...</span></td><td colspan="11"><div class="loading-bar"></div></td><td></td></tr>`);
+  list.insertAdjacentHTML('beforeend', `<tr class="loading" data-loading="${symbol}"><td class="stock-cell"><strong>${symbol}</strong><span>Loading market data...</span></td><td colspan="12"><div class="loading-bar"></div></td><td></td></tr>`);
 }
 
 async function loadSymbol(symbol) {
@@ -97,7 +118,7 @@ async function loadSymbol(symbol) {
     loading.outerHTML = rowTemplate(data);
   } catch (error) {
     const loading = list.querySelector(`[data-loading="${symbol}"]`);
-    if (loading) loading.outerHTML = `<tr class="error-row"><td colspan="13">${symbol}: ${error.message}. Check the ticker and refresh.</td></tr>`;
+    if (loading) loading.outerHTML = `<tr class="error-row"><td colspan="14">${symbol}: ${error.message}. Check the ticker and refresh.</td></tr>`;
   }
 }
 
@@ -118,8 +139,8 @@ async function loadAll() {
     }
   }));
   results.sort((left, right) => {
-    const leftJuice = nextFridayJuice(left.data);
-    const rightJuice = nextFridayJuice(right.data);
+    const leftJuice = optionJuice(left.data, juiceSortExpiration);
+    const rightJuice = optionJuice(right.data, juiceSortExpiration);
     if (leftJuice == null && rightJuice == null) return 0;
     if (leftJuice == null) return 1;
     if (rightJuice == null) return -1;
@@ -127,7 +148,7 @@ async function loadAll() {
   });
   list.innerHTML = results.map((result) => result.data
     ? rowTemplate(result.data)
-    : `<tr class="error-row"><td colspan="13">${result.symbol}: ${result.error}. Check the ticker and refresh.</td></tr>`
+    : `<tr class="error-row"><td colspan="14">${result.symbol}: ${result.error}. Check the ticker and refresh.</td></tr>`
   ).join('');
   lastRefresh.textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
@@ -152,6 +173,11 @@ refreshButton.addEventListener('click', loadAll);
 targetSelect.addEventListener('change', () => {
   targetPercent = Number(targetSelect.value);
   localStorage.setItem(targetStorageKey, targetPercent.toFixed(2));
+  loadAll();
+});
+juiceSortSelect.addEventListener('change', () => {
+  juiceSortExpiration = juiceSortSelect.value;
+  localStorage.setItem(juiceSortStorageKey, juiceSortExpiration);
   loadAll();
 });
 loadAll();
