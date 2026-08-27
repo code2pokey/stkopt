@@ -1,3 +1,19 @@
+function initializeGoogleAnalytics() {
+  const measurementId = 'G-JMDS9WBL6F';
+
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = function gtag() { window.dataLayer.push(arguments); };
+  window.gtag('js', new Date());
+  window.gtag('config', measurementId);
+
+  const script = document.createElement('script');
+  script.async = true;
+  script.src = `https://www.googletagmanager.com/gtag/js?id=${measurementId}`;
+  document.head.appendChild(script);
+}
+
+initializeGoogleAnalytics();
+
 const list = document.querySelector('#watchlist');
 const emptyState = document.querySelector('#empty-state');
 const count = document.querySelector('#watch-count');
