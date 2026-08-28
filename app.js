@@ -64,19 +64,37 @@ document.querySelector('#following-friday-date').textContent = formatFriday(foll
 
 const followingFridayHeader = document.querySelector('#following-friday-date').closest('th');
 if (followingFridayHeader && !document.querySelector('#following-friday-juice-header')) {
-  followingFridayHeader.insertAdjacentHTML('afterend', '<th id="following-friday-juice-header">JUICE</th>');
+  followingFridayHeader.insertAdjacentHTML('afterend', '<th id="following-friday-juice-header">Juice</th>');
 }
+
+document.querySelectorAll('th').forEach((header) => {
+  if (header.textContent.trim() === 'JUICE') header.textContent = 'Juice';
+});
 
 const sortControl = document.createElement('label');
 sortControl.className = targetSelect.closest('label')?.className || '';
 sortControl.innerHTML = `Sort by
-  <select id="juice-sort-select" aria-label="JUICE column used to sort stocks">
-    <option value="nextFriday">First JUICE</option>
-    <option value="followingFriday">Second JUICE</option>
+  <select id="juice-sort-select" aria-label="Juice column used to sort stocks">
+    <option value="nextFriday">First Juice</option>
+    <option value="followingFriday">Second Juice</option>
   </select>`;
 (targetSelect.closest('label') || targetSelect).insertAdjacentElement('afterend', sortControl);
 const juiceSortSelect = document.querySelector('#juice-sort-select');
 juiceSortSelect.value = juiceSortExpiration;
+
+const juiceNote = document.createElement('aside');
+juiceNote.id = 'juice-note';
+juiceNote.setAttribute('role', 'note');
+juiceNote.innerHTML = '<strong>About Juice:</strong> Juice is a comparison score that weights put-premium yield (two-thirds) and downside cushion (one-third). It is a screening aid based on available market data, not financial advice. Always verify quotes and evaluate the risks before trading.<br><strong>Your ticker list:</strong> Tickers are stored locally in this browser, so your list persists between visits but does not sync or refresh across browsers or devices. Clearing this site\'s browser data will reset the list. Market quotes refresh separately.';
+Object.assign(juiceNote.style, {
+  margin: '12px 0',
+  padding: '10px 12px',
+  borderLeft: '3px solid #72a4f2',
+  fontSize: '0.9rem',
+  lineHeight: '1.45',
+});
+const stockTable = list.closest('table');
+if (stockTable) stockTable.insertAdjacentElement('beforebegin', juiceNote);
 
 for (let value = 0.1; value <= 5; value += 0.1) {
   const percent = value.toFixed(2);
