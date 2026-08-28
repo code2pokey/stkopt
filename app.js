@@ -37,6 +37,20 @@ function initializeKofiButton() {
 
 initializeKofiButton();
 
+document.querySelectorAll('body *').forEach((element) => {
+  const isOptDeskLabel = element.textContent.trim().toLowerCase() === 'opt desk';
+  const hasMatchingChild = Array.from(element.children).some(
+    (child) => child.textContent.trim().toLowerCase() === 'opt desk'
+  );
+  if (!isOptDeskLabel || hasMatchingChild) return;
+
+  const wrapper = element.parentElement;
+  element.remove();
+  if (wrapper && wrapper !== document.body && !wrapper.textContent.trim() && !wrapper.children.length) {
+    wrapper.remove();
+  }
+});
+
 const list = document.querySelector('#watchlist');
 const emptyState = document.querySelector('#empty-state');
 const count = document.querySelector('#watch-count');
