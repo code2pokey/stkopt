@@ -87,7 +87,7 @@ juiceSortSelect.value = juiceSortExpiration;
 const targetControlStyle = window.getComputedStyle(targetControl);
 const targetSelectStyle = window.getComputedStyle(targetSelect);
 Object.assign(sortControl.style, {
-  fontSize: targetControlStyle.fontSize,
+  fontSize: '0.8rem',
   fontWeight: targetControlStyle.fontWeight,
   lineHeight: targetControlStyle.lineHeight,
 });
@@ -96,7 +96,7 @@ Object.assign(juiceSortSelect.style, {
   width: `${targetSelect.getBoundingClientRect().width}px`,
   height: `${targetSelect.getBoundingClientRect().height}px`,
   padding: targetSelectStyle.padding,
-  fontSize: targetSelectStyle.fontSize,
+  fontSize: '0.8rem',
   fontWeight: targetSelectStyle.fontWeight,
   lineHeight: targetSelectStyle.lineHeight,
 });
