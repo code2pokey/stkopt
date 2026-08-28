@@ -96,9 +96,12 @@ Object.assign(juiceSortSelect.style, {
   width: `${targetSelect.getBoundingClientRect().width}px`,
   height: `${targetSelect.getBoundingClientRect().height}px`,
   padding: targetSelectStyle.padding,
-  fontSize: '0.8rem',
   fontWeight: targetSelectStyle.fontWeight,
   lineHeight: targetSelectStyle.lineHeight,
+});
+juiceSortSelect.style.setProperty('font-size', '0.8rem', 'important');
+juiceSortSelect.querySelectorAll('option').forEach((option) => {
+  option.style.setProperty('font-size', '0.8rem', 'important');
 });
 
 const juiceNote = document.createElement('aside');
