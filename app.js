@@ -84,6 +84,22 @@ sortControl.innerHTML = `Sort by
 targetControl.insertAdjacentElement('afterend', sortControl);
 const juiceSortSelect = document.querySelector('#juice-sort-select');
 juiceSortSelect.value = juiceSortExpiration;
+const targetControlStyle = window.getComputedStyle(targetControl);
+const targetSelectStyle = window.getComputedStyle(targetSelect);
+Object.assign(sortControl.style, {
+  fontSize: targetControlStyle.fontSize,
+  fontWeight: targetControlStyle.fontWeight,
+  lineHeight: targetControlStyle.lineHeight,
+});
+Object.assign(juiceSortSelect.style, {
+  boxSizing: targetSelectStyle.boxSizing,
+  width: `${targetSelect.getBoundingClientRect().width}px`,
+  height: `${targetSelect.getBoundingClientRect().height}px`,
+  padding: targetSelectStyle.padding,
+  fontSize: targetSelectStyle.fontSize,
+  fontWeight: targetSelectStyle.fontWeight,
+  lineHeight: targetSelectStyle.lineHeight,
+});
 
 const juiceNote = document.createElement('aside');
 juiceNote.id = 'juice-note';
