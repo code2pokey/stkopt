@@ -87,14 +87,25 @@ juiceNote.id = 'juice-note';
 juiceNote.setAttribute('role', 'note');
 juiceNote.innerHTML = '<strong>About Juice:</strong> Juice is a comparison score that weights put-premium yield (two-thirds) and downside cushion (one-third). It is a screening aid based on available market data, not financial advice. Always verify quotes and evaluate the risks before trading.<br><strong>Your ticker list:</strong> Tickers are stored locally in this browser, so your list persists between visits but does not sync or refresh across browsers or devices. Clearing this site\'s browser data will reset the list. Market quotes refresh separately.';
 Object.assign(juiceNote.style, {
-  margin: '12px 0',
+  margin: '0',
   padding: '10px 12px',
   borderLeft: '3px solid #72a4f2',
   fontSize: '0.9rem',
   lineHeight: '1.45',
+  flex: '1 1 480px',
 });
-const stockTable = list.closest('table');
-if (stockTable) stockTable.insertAdjacentElement('beforebegin', juiceNote);
+const juiceInfoRow = document.createElement('div');
+juiceInfoRow.id = 'juice-info-row';
+Object.assign(juiceInfoRow.style, {
+  display: 'flex',
+  alignItems: 'flex-start',
+  gap: '16px',
+  flexWrap: 'wrap',
+  margin: '12px 0',
+});
+sortControl.insertAdjacentElement('beforebegin', juiceInfoRow);
+sortControl.style.flex = '0 0 auto';
+juiceInfoRow.append(sortControl, juiceNote);
 
 for (let value = 0.1; value <= 5; value += 0.1) {
   const percent = value.toFixed(2);
