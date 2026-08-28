@@ -14,6 +14,29 @@ function initializeGoogleAnalytics() {
 
 initializeGoogleAnalytics();
 
+function initializeKofiButton() {
+  const container = document.createElement('div');
+  container.id = 'kofi-support-button';
+  container.setAttribute('aria-label', 'Support this site on Ko-fi');
+  Object.assign(container.style, {
+    position: 'fixed',
+    right: '20px',
+    bottom: '20px',
+    zIndex: '1000',
+  });
+  document.body.appendChild(container);
+
+  const script = document.createElement('script');
+  script.src = 'https://storage.ko-fi.com/cdn/widget/Widget_2.js';
+  script.onload = () => {
+    window.kofiwidget2.init('Buy me a coffee ☕', '#72a4f2', 'S6G525XNFX');
+    container.innerHTML = window.kofiwidget2.getHTML();
+  };
+  document.head.appendChild(script);
+}
+
+initializeKofiButton();
+
 const list = document.querySelector('#watchlist');
 const emptyState = document.querySelector('#empty-state');
 const count = document.querySelector('#watch-count');
