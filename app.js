@@ -103,6 +103,20 @@ juiceSortSelect.style.setProperty('font-size', '0.8rem', 'important');
 juiceSortSelect.querySelectorAll('option').forEach((option) => {
   option.style.setProperty('font-size', '0.8rem', 'important');
 });
+const sortControlStyle = window.getComputedStyle(sortControl);
+const juiceSortSelectStyle = window.getComputedStyle(juiceSortSelect);
+targetControl.style.setProperty('font-size', '0.8rem', 'important');
+targetControl.style.setProperty('font-family', sortControlStyle.fontFamily, 'important');
+targetControl.querySelectorAll('span, small').forEach((labelText) => {
+  labelText.style.setProperty('font-size', '0.8rem', 'important');
+  labelText.style.setProperty('font-family', sortControlStyle.fontFamily, 'important');
+});
+targetSelect.style.setProperty('font-size', '0.8rem', 'important');
+targetSelect.style.setProperty('font-family', juiceSortSelectStyle.fontFamily, 'important');
+targetSelect.querySelectorAll('option').forEach((option) => {
+  option.style.setProperty('font-size', '0.8rem', 'important');
+  option.style.setProperty('font-family', juiceSortSelectStyle.fontFamily, 'important');
+});
 
 const juiceNote = document.createElement('aside');
 juiceNote.id = 'juice-note';
