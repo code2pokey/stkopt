@@ -44,6 +44,7 @@ const input = document.querySelector('#symbol-input');
 const refreshButton = document.querySelector('#refresh');
 const lastRefresh = document.querySelector('#last-refresh');
 const targetSelect = document.querySelector('#target-select');
+const targetControl = targetSelect.closest('label') || targetSelect;
 const storageKey = 'stockoption-watchlist';
 const targetStorageKey = 'stockoption-target-percent';
 const juiceSortStorageKey = 'stockoption-juice-sort-expiration';
@@ -66,19 +67,21 @@ const followingFridayHeader = document.querySelector('#following-friday-date').c
 if (followingFridayHeader && !document.querySelector('#following-friday-juice-header')) {
   followingFridayHeader.insertAdjacentHTML('afterend', '<th id="following-friday-juice-header">Juice</th>');
 }
+const followingFridayJuiceHeader = document.querySelector('#following-friday-juice-header');
+if (followingFridayJuiceHeader) followingFridayJuiceHeader.style.fontWeight = 'normal';
 
 document.querySelectorAll('th').forEach((header) => {
   if (header.textContent.trim() === 'JUICE') header.textContent = 'Juice';
 });
 
 const sortControl = document.createElement('label');
-sortControl.className = targetSelect.closest('label')?.className || '';
+sortControl.className = targetControl.className || '';
 sortControl.innerHTML = `Sort by
   <select id="juice-sort-select" aria-label="Juice column used to sort stocks">
     <option value="nextFriday">First Juice</option>
     <option value="followingFriday">Second Juice</option>
   </select>`;
-(targetSelect.closest('label') || targetSelect).insertAdjacentElement('afterend', sortControl);
+targetControl.insertAdjacentElement('afterend', sortControl);
 const juiceSortSelect = document.querySelector('#juice-sort-select');
 juiceSortSelect.value = juiceSortExpiration;
 
@@ -90,7 +93,7 @@ Object.assign(juiceNote.style, {
   margin: '0',
   padding: '10px 12px',
   borderLeft: '3px solid #72a4f2',
-  fontSize: '0.9rem',
+  fontSize: '0.8rem',
   lineHeight: '1.45',
   flex: '1 1 480px',
 });
@@ -103,9 +106,18 @@ Object.assign(juiceInfoRow.style, {
   flexWrap: 'wrap',
   margin: '12px 0',
 });
-sortControl.insertAdjacentElement('beforebegin', juiceInfoRow);
-sortControl.style.flex = '0 0 auto';
-juiceInfoRow.append(sortControl, juiceNote);
+const juiceControls = document.createElement('div');
+juiceControls.id = 'juice-controls';
+Object.assign(juiceControls.style, {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'stretch',
+  gap: '6px',
+  flex: '0 0 auto',
+});
+targetControl.insertAdjacentElement('beforebegin', juiceInfoRow);
+juiceControls.append(targetControl, sortControl);
+juiceInfoRow.append(juiceControls, juiceNote);
 
 for (let value = 0.1; value <= 5; value += 0.1) {
   const percent = value.toFixed(2);
