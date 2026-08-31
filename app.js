@@ -202,9 +202,9 @@ const juiceCell = (stock, expirationKey) => {
   const juice = optionJuice(stock, expirationKey);
   if (juice == null) return '<span>—</span><small>No rank</small>';
   const downsideCushion = Math.max(((stock.price - option.strike) / stock.price) * 100, 0);
-  return `<span>${(juice * 100).toFixed(2)}%</span><small>${money(option.premium)} * ${downsideCushion.toFixed(1)}% below</small>`;
+  return `<span>${(juice * 100).toFixed(2)}%</span><small>${money(option.premium)} * ${downsideCushion.toFixed(2)}% below</small>`;
 };
-const rowOption = (option, stockPrice) => `<div class="put-line"><span class="option-main"><b>${money(option.premium)}</b><em>/</em>${money(option.strike)}</span><span class="option-underlying">// ${money(stockPrice)} // ${signedPercent(((stockPrice - option.strike) / option.strike) * 100)} away</span><span class="option-stats">V ${Number(option.volume).toLocaleString()} · OI ${Number(option.openInterest).toLocaleString()} · IV ${signedPercent(option.impliedVolatility * 100)} · R ${Number(option.ratio).toFixed(2)}%</span></div>`;
+const rowOption = (option, stockPrice) => `<div class="put-line"><span class="option-main"><b>${money(option.premium)}</b><em>/</em>${money(option.strike)}</span><span class="option-underlying">// ${money(stockPrice)} // ${Math.max(((stockPrice - option.strike) / stockPrice) * 100, 0).toFixed(2)}% below</span><span class="option-stats">V ${Number(option.volume).toLocaleString()} · OI ${Number(option.openInterest).toLocaleString()} · IV ${signedPercent(option.impliedVolatility * 100)} · R ${Number(option.ratio).toFixed(2)}%</span></div>`;
 const rowOptions = (puts, stockPrice) => {
   return puts?.middle ? rowOption(puts.middle, stockPrice) : '<span class="option-empty">No qualifying put</span>';
 };
