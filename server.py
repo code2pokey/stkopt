@@ -7,6 +7,7 @@ import time
 import urllib.parse
 import urllib.request
 import http.cookiejar
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
@@ -28,6 +29,8 @@ EARNINGS_CACHE = {
     "message": None,
 }
 EARNINGS_LOCK = threading.Lock()
+NASDAQ_EARNINGS_CACHE = {"expires_at": 0, "by_symbol": {}}
+NASDAQ_EARNINGS_LOCK = threading.Lock()
 
 
 def earnings_calendar():
@@ -104,6 +107,85 @@ def earnings_calendar():
             print("Alpha Vantage earnings calendar error: %s" % EARNINGS_CACHE["message"])
 
         return EARNINGS_CACHE["by_symbol"]
+
+
+def nasdaq_earnings_calendar(days=14):
+    """Keyless fallback for earnings scheduled in the next two weeks."""
+    now = time.time()
+    if NASDAQ_EARNINGS_CACHE["expires_at"] > now:
+        return NASDAQ_EARNINGS_CACHE["by_symbol"]
+
+    with NASDAQ_EARNINGS_LOCK:
+        now = time.time()
+        if NASDAQ_EARNINGS_CACHE["expires_at"] > now:
+            return NASDAQ_EARNINGS_CACHE["by_symbol"]
+
+        by_symbol = {}
+        successful_days = 0
+        today = datetime.now().date()
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "application/json, text/plain, */*",
+            "Origin": "https://www.nasdaq.com",
+            "Referer": "https://www.nasdaq.com/",
+        }
+
+        report_dates = [
+            today + timedelta(days=offset)
+            for offset in range(days + 1)
+            if (today + timedelta(days=offset)).weekday() < 5
+        ]
+
+        def fetch_date(report_date):
+            query = urllib.parse.urlencode({"date": report_date.isoformat()})
+            request = urllib.request.Request(
+                "https://api.nasdaq.com/api/calendar/earnings?" + query,
+                headers=headers,
+            )
+            with urllib.request.urlopen(request, timeout=15) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            return report_date, payload.get("data", {}).get("rows") or []
+
+        with ThreadPoolExecutor(max_workers=6) as executor:
+            futures = [executor.submit(fetch_date, report_date) for report_date in report_dates]
+            for future in as_completed(futures):
+                try:
+                    report_date, rows = future.result()
+                except Exception:
+                    continue
+                successful_days += 1
+
+                for row in rows:
+                    symbol = (row.get("symbol") or "").upper().strip()
+                    if not symbol:
+                        continue
+                    current = by_symbol.get(symbol)
+                    if current and current["date"] <= report_date.isoformat():
+                        continue
+                    estimate_text = (row.get("epsForecast") or "").strip()
+                    negative = estimate_text.startswith("(") and estimate_text.endswith(")")
+                    estimate_text = estimate_text.strip("()$,")
+                    try:
+                        estimate = float(estimate_text) * (-1 if negative else 1)
+                    except ValueError:
+                        estimate = None
+                    by_symbol[symbol] = {
+                        "date": report_date.isoformat(),
+                        "fiscalDateEnding": (row.get("fiscalQuarterEnding") or "").strip() or None,
+                        "estimate": estimate,
+                        "currency": "USD",
+                        "timeOfDay": (row.get("time") or "").strip() or None,
+                    }
+
+        NASDAQ_EARNINGS_CACHE.update({
+            "expires_at": now + (
+                EARNINGS_CACHE_TTL_SECONDS if successful_days else EARNINGS_RETRY_SECONDS
+            ),
+            "by_symbol": by_symbol,
+        })
+        if successful_days:
+            print("Nasdaq earnings fallback loaded: %d symbols" % len(by_symbol))
+        return by_symbol
 
 
 def yahoo_json(url):
@@ -267,6 +349,14 @@ def fetch_stock(symbol, target_percent=1.0):
         }
 
     calendar = earnings_calendar()
+    next_earnings = calendar.get(symbol)
+    earnings_status = EARNINGS_CACHE["status"]
+    earnings_message = EARNINGS_CACHE["message"]
+    if not next_earnings:
+        next_earnings = nasdaq_earnings_calendar().get(symbol)
+        if next_earnings:
+            earnings_status = "ok_nasdaq_fallback"
+            earnings_message = "Nasdaq supplied the date because Alpha Vantage was unavailable."
     return {
         "symbol": symbol,
         "name": meta.get("longName") or meta.get("shortName") or symbol,
@@ -281,9 +371,9 @@ def fetch_stock(symbol, target_percent=1.0):
         "moving90": average(90),
         "moving100": average(100),
         "moving120": average(120),
-        "nextEarnings": calendar.get(symbol),
-        "earningsStatus": EARNINGS_CACHE["status"],
-        "earningsMessage": EARNINGS_CACHE["message"],
+        "nextEarnings": next_earnings,
+        "earningsStatus": earnings_status,
+        "earningsMessage": earnings_message,
         "options": options,
     }
 
