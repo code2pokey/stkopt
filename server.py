@@ -15,7 +15,10 @@ YAHOO_HEADERS = {"User-Agent": "Mozilla/5.0"}
 COOKIE_JAR = http.cookiejar.CookieJar()
 YAHOO_OPENER = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(COOKIE_JAR))
 YAHOO_CRUMB = None
-ALPHA_VANTAGE_API_KEY = os.environ.get("ALPHAVANTAGE_API_KEY", "").strip()
+ALPHA_VANTAGE_API_KEY = (
+    os.environ.get("ALPHA_VANTAGE_API_KEY")
+    or os.environ.get("ALPHAVANTAGE_API_KEY", "")
+).strip()
 EARNINGS_CACHE_TTL_SECONDS = 6 * 60 * 60
 EARNINGS_RETRY_SECONDS = 5 * 60
 EARNINGS_CACHE = {
