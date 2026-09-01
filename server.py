@@ -215,7 +215,7 @@ class Handler(SimpleHTTPRequestHandler):
         return
 
 
-if __name__ == "__main__": 
+if __name__ == "__main__":
     os.chdir(ROOT)
     port = int(os.environ.get("PORT", "8000"))
     print("Stockoption running on port %d" % port)
