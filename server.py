@@ -1,5 +1,9 @@
+import csv
+import io
 import json
 import os
+import threading
+import time
 import urllib.parse
 import urllib.request
 import http.cookiejar
@@ -11,6 +15,72 @@ YAHOO_HEADERS = {"User-Agent": "Mozilla/5.0"}
 COOKIE_JAR = http.cookiejar.CookieJar()
 YAHOO_OPENER = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(COOKIE_JAR))
 YAHOO_CRUMB = None
+ALPHA_VANTAGE_API_KEY = os.environ.get("ALPHAVANTAGE_API_KEY", "").strip()
+EARNINGS_CACHE_TTL_SECONDS = 6 * 60 * 60
+EARNINGS_RETRY_SECONDS = 5 * 60
+EARNINGS_CACHE = {"expires_at": 0, "by_symbol": {}}
+EARNINGS_LOCK = threading.Lock()
+
+
+def earnings_calendar():
+    """Return upcoming earnings keyed by symbol, with a shared six-hour cache."""
+    if not ALPHA_VANTAGE_API_KEY:
+        return {}
+
+    now = time.time()
+    if EARNINGS_CACHE["expires_at"] > now:
+        return EARNINGS_CACHE["by_symbol"]
+
+    with EARNINGS_LOCK:
+        now = time.time()
+        if EARNINGS_CACHE["expires_at"] > now:
+            return EARNINGS_CACHE["by_symbol"]
+
+        query = urllib.parse.urlencode({
+            "function": "EARNINGS_CALENDAR",
+            "horizon": "3month",
+            "apikey": ALPHA_VANTAGE_API_KEY,
+        })
+        request = urllib.request.Request(
+            "https://www.alphavantage.co/query?" + query,
+            headers=YAHOO_HEADERS,
+        )
+
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                content = response.read().decode("utf-8-sig")
+
+            by_symbol = {}
+            today = datetime.now().date()
+            for row in csv.DictReader(io.StringIO(content)):
+                symbol = (row.get("symbol") or "").upper().strip()
+                report_date_text = (row.get("reportDate") or "").strip()
+                try:
+                    report_date = datetime.strptime(report_date_text, "%Y-%m-%d").date()
+                except ValueError:
+                    continue
+                if not symbol or report_date < today:
+                    continue
+
+                current = by_symbol.get(symbol)
+                if current and current["date"] <= report_date_text:
+                    continue
+                by_symbol[symbol] = {
+                    "date": report_date_text,
+                    "fiscalDateEnding": (row.get("fiscalDateEnding") or "").strip() or None,
+                    "estimate": (row.get("estimate") or "").strip() or None,
+                    "currency": (row.get("currency") or "").strip() or None,
+                }
+
+            EARNINGS_CACHE.update({
+                "expires_at": now + EARNINGS_CACHE_TTL_SECONDS,
+                "by_symbol": by_symbol,
+            })
+        except Exception:
+            # Keep stock/option data available if Alpha Vantage is unavailable.
+            EARNINGS_CACHE["expires_at"] = now + EARNINGS_RETRY_SECONDS
+
+        return EARNINGS_CACHE["by_symbol"]
 
 
 def yahoo_json(url):
@@ -187,6 +257,7 @@ def fetch_stock(symbol, target_percent=1.0):
         "moving90": average(90),
         "moving100": average(100),
         "moving120": average(120),
+        "nextEarnings": earnings_calendar().get(symbol),
         "options": options,
     }
 
@@ -220,4 +291,3 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8000"))
     print("Stockoption running on port %d" % port)
     ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
-
