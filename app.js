@@ -213,7 +213,7 @@ const juiceCell = (stock, expirationKey) => {
   return `<span>${(juice * 100).toFixed(2)}%</span><small>${money(option.premium)} * ${downsideCushion.toFixed(2)}% below</small>`;
 };
 const earningsCell = (earnings) => {
-  if (!earnings?.date) return '<span>—</span><small>Not announced</small>';
+  if (!earnings?.date) return '<span>—</span><small>No date available</small>';
   const [year, month, day] = earnings.date.split('-').map(Number);
   const earningsDate = new Date(year, month - 1, day);
   const today = new Date();
@@ -225,7 +225,9 @@ const earningsCell = (earnings) => {
     ...(year !== today.getFullYear() ? { year: 'numeric' } : {}),
   });
   const timing = daysUntil === 0 ? 'Today' : daysUntil === 1 ? 'Tomorrow' : `${daysUntil} days`;
-  return `<span>${formattedDate}</span><small>${timing}</small>`;
+  const status = earnings.isEstimate ? `Estimated · ${timing}` : timing;
+  const urgencyClass = daysUntil <= 14 ? 'negative' : 'positive';
+  return `<span class="${urgencyClass}">${formattedDate}</span><small>${status}</small>`;
 };
 const rowOption = (option, stockPrice) => `<div class="put-line"><span class="option-main"><b>${money(option.premium)}</b><em>/</em>${money(option.strike)}</span><span class="option-underlying">// ${money(stockPrice)} // ${Math.max(((stockPrice - option.strike) / stockPrice) * 100, 0).toFixed(2)}% below</span><span class="option-stats">V ${Number(option.volume).toLocaleString()} · OI ${Number(option.openInterest).toLocaleString()} · IV ${signedPercent(option.impliedVolatility * 100)} · R ${Number(option.ratio).toFixed(2)}%</span></div>`;
 const rowOptions = (puts, stockPrice) => {
