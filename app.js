@@ -88,6 +88,14 @@ document.querySelectorAll('th').forEach((header) => {
   if (header.textContent.trim() === 'JUICE') header.textContent = 'Juice';
 });
 
+const firstJuiceHeader = Array.from(document.querySelectorAll('th')).find(
+  (header) => header.textContent.trim() === 'Juice'
+    && header.id !== 'following-friday-juice-header'
+);
+if (firstJuiceHeader && !document.querySelector('#next-earnings-header')) {
+  firstJuiceHeader.insertAdjacentHTML('afterend', '<th id="next-earnings-header">Next Earnings</th>');
+}
+
 const sortControl = document.createElement('label');
 sortControl.className = targetControl.className || '';
 sortControl.innerHTML = `Sort by
@@ -204,6 +212,21 @@ const juiceCell = (stock, expirationKey) => {
   const downsideCushion = Math.max(((stock.price - option.strike) / stock.price) * 100, 0);
   return `<span>${(juice * 100).toFixed(2)}%</span><small>${money(option.premium)} * ${downsideCushion.toFixed(2)}% below</small>`;
 };
+const earningsCell = (earnings) => {
+  if (!earnings?.date) return '<span>—</span><small>Not announced</small>';
+  const [year, month, day] = earnings.date.split('-').map(Number);
+  const earningsDate = new Date(year, month - 1, day);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const daysUntil = Math.round((earningsDate - today) / 86400000);
+  const formattedDate = earningsDate.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    ...(year !== today.getFullYear() ? { year: 'numeric' } : {}),
+  });
+  const timing = daysUntil === 0 ? 'Today' : daysUntil === 1 ? 'Tomorrow' : `${daysUntil} days`;
+  return `<span>${formattedDate}</span><small>${timing}</small>`;
+};
 const rowOption = (option, stockPrice) => `<div class="put-line"><span class="option-main"><b>${money(option.premium)}</b><em>/</em>${money(option.strike)}</span><span class="option-underlying">// ${money(stockPrice)} // ${Math.max(((stockPrice - option.strike) / stockPrice) * 100, 0).toFixed(2)}% below</span><span class="option-stats">V ${Number(option.volume).toLocaleString()} · OI ${Number(option.openInterest).toLocaleString()} · IV ${signedPercent(option.impliedVolatility * 100)} · R ${Number(option.ratio).toFixed(2)}%</span></div>`;
 const rowOptions = (puts, stockPrice) => {
   return puts?.middle ? rowOption(puts.middle, stockPrice) : '<span class="option-empty">No qualifying put</span>';
@@ -218,6 +241,7 @@ const rowTemplate = (stock) => {
       <td class="price-cell"><span class="${changeClass}">${money(stock.price)}</span><small class="${changeClass}">${signedMoney(stock.priceChange)} / ${signedPercent(stock.change)}</small></td>
       <td class="option-cell">${rowOptions(nextFriday.puts, stock.price)}</td>
       <td class="juice-cell">${juiceCell(stock, 'nextFriday')}</td>
+      <td class="metric-cell earnings-cell">${earningsCell(stock.nextEarnings)}</td>
       <td class="option-cell">${rowOptions(followingFriday.puts, stock.price)}</td>
       <td class="juice-cell">${juiceCell(stock, 'followingFriday')}</td>
       <td class="metric-cell"><span class="${movingClass(stock.price, stock.moving15)}">${money(stock.moving15)}</span><small>${movingDistance(stock.price, stock.moving15)}</small></td>
@@ -232,7 +256,7 @@ const rowTemplate = (stock) => {
 };
 
 function renderLoading(symbol) {
-  list.insertAdjacentHTML('beforeend', `<tr class="loading" data-loading="${symbol}"><td class="stock-cell"><strong>${symbol}</strong><span>Loading market data...</span></td><td colspan="12"><div class="loading-bar"></div></td><td></td></tr>`);
+  list.insertAdjacentHTML('beforeend', `<tr class="loading" data-loading="${symbol}"><td class="stock-cell"><strong>${symbol}</strong><span>Loading market data...</span></td><td colspan="13"><div class="loading-bar"></div></td><td></td></tr>`);
 }
 
 async function loadSymbol(symbol) {
@@ -245,7 +269,7 @@ async function loadSymbol(symbol) {
     loading.outerHTML = rowTemplate(data);
   } catch (error) {
     const loading = list.querySelector(`[data-loading="${symbol}"]`);
-    if (loading) loading.outerHTML = `<tr class="error-row"><td colspan="14">${symbol}: ${error.message}. Check the ticker and refresh.</td></tr>`;
+    if (loading) loading.outerHTML = `<tr class="error-row"><td colspan="15">${symbol}: ${error.message}. Check the ticker and refresh.</td></tr>`;
   }
 }
 
@@ -275,7 +299,7 @@ async function loadAll() {
   });
   list.innerHTML = results.map((result) => result.data
     ? rowTemplate(result.data)
-    : `<tr class="error-row"><td colspan="14">${result.symbol}: ${result.error}. Check the ticker and refresh.</td></tr>`
+    : `<tr class="error-row"><td colspan="15">${result.symbol}: ${result.error}. Check the ticker and refresh.</td></tr>`
   ).join('');
   lastRefresh.textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
