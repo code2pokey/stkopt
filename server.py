@@ -18,13 +18,22 @@ YAHOO_CRUMB = None
 ALPHA_VANTAGE_API_KEY = os.environ.get("ALPHAVANTAGE_API_KEY", "").strip()
 EARNINGS_CACHE_TTL_SECONDS = 6 * 60 * 60
 EARNINGS_RETRY_SECONDS = 5 * 60
-EARNINGS_CACHE = {"expires_at": 0, "by_symbol": {}}
+EARNINGS_CACHE = {
+    "expires_at": 0,
+    "by_symbol": {},
+    "status": "not_loaded",
+    "message": None,
+}
 EARNINGS_LOCK = threading.Lock()
 
 
 def earnings_calendar():
     """Return upcoming earnings keyed by symbol, with a shared six-hour cache."""
     if not ALPHA_VANTAGE_API_KEY:
+        EARNINGS_CACHE.update({
+            "status": "missing_api_key",
+            "message": "ALPHA_VANTAGE_API_KEY is not available to this service.",
+        })
         return {}
 
     now = time.time()
@@ -72,13 +81,24 @@ def earnings_calendar():
                     "currency": (row.get("currency") or "").strip() or None,
                 }
 
+            if not by_symbol:
+                raise ValueError("Alpha Vantage returned no earnings-calendar rows")
+
             EARNINGS_CACHE.update({
                 "expires_at": now + EARNINGS_CACHE_TTL_SECONDS,
                 "by_symbol": by_symbol,
+                "status": "ok",
+                "message": None,
             })
-        except Exception:
+            print("Alpha Vantage earnings calendar loaded: %d symbols" % len(by_symbol))
+        except Exception as error:
             # Keep stock/option data available if Alpha Vantage is unavailable.
-            EARNINGS_CACHE["expires_at"] = now + EARNINGS_RETRY_SECONDS
+            EARNINGS_CACHE.update({
+                "expires_at": now + EARNINGS_RETRY_SECONDS,
+                "status": "error",
+                "message": "%s: %s" % (type(error).__name__, str(error)[:180]),
+            })
+            print("Alpha Vantage earnings calendar error: %s" % EARNINGS_CACHE["message"])
 
         return EARNINGS_CACHE["by_symbol"]
 
@@ -243,6 +263,7 @@ def fetch_stock(symbol, target_percent=1.0):
             "date": f"{expiration:%b} {expiration.day}" if expiration else None,
         }
 
+    calendar = earnings_calendar()
     return {
         "symbol": symbol,
         "name": meta.get("longName") or meta.get("shortName") or symbol,
@@ -257,7 +278,9 @@ def fetch_stock(symbol, target_percent=1.0):
         "moving90": average(90),
         "moving100": average(100),
         "moving120": average(120),
-        "nextEarnings": earnings_calendar().get(symbol),
+        "nextEarnings": calendar.get(symbol),
+        "earningsStatus": EARNINGS_CACHE["status"],
+        "earningsMessage": EARNINGS_CACHE["message"],
         "options": options,
     }
 
