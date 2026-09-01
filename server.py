@@ -2,6 +2,7 @@ import csv
 import io
 import json
 import os
+import re
 import threading
 import time
 import urllib.parse
@@ -31,6 +32,8 @@ EARNINGS_CACHE = {
 EARNINGS_LOCK = threading.Lock()
 NASDAQ_EARNINGS_CACHE = {"expires_at": 0, "by_symbol": {}}
 NASDAQ_EARNINGS_LOCK = threading.Lock()
+YAHOO_EARNINGS_CACHE = {}
+YAHOO_EARNINGS_LOCK = threading.Lock()
 
 
 def earnings_calendar():
@@ -186,6 +189,52 @@ def nasdaq_earnings_calendar(days=14):
         if successful_days:
             print("Nasdaq earnings fallback loaded: %d symbols" % len(by_symbol))
         return by_symbol
+
+
+def yahoo_earnings(symbol):
+    """Return Yahoo's announced or estimated earnings date for one symbol."""
+    now = time.time()
+    with YAHOO_EARNINGS_LOCK:
+        cached = YAHOO_EARNINGS_CACHE.get(symbol)
+        if cached and cached["expires_at"] > now:
+            return cached["value"]
+
+    value = None
+    try:
+        encoded = urllib.parse.quote(symbol)
+        request = urllib.request.Request(
+            "https://finance.yahoo.com/quote/" + encoded + "/",
+            headers=YAHOO_HEADERS,
+        )
+        with urllib.request.urlopen(request, timeout=20) as response:
+            page = response.read().decode("utf-8", "ignore").replace('\\"', '"')
+
+        calendar_match = re.search(
+            r'"earningsDate":\[(.*?)\],"isEarningsDateEstimate":(true|false)',
+            page,
+        )
+        if calendar_match:
+            date_match = re.search(r'"fmt":"(\d{4}-\d{2}-\d{2})"', calendar_match.group(1))
+            if date_match:
+                value = {
+                    "date": date_match.group(1),
+                    "fiscalDateEnding": None,
+                    "estimate": None,
+                    "currency": "USD",
+                    "isEstimate": calendar_match.group(2) == "true",
+                    "source": "Yahoo Finance",
+                }
+    except Exception as error:
+        print("Yahoo earnings fallback error for %s: %s" % (symbol, str(error)[:180]))
+
+    with YAHOO_EARNINGS_LOCK:
+        YAHOO_EARNINGS_CACHE[symbol] = {
+            "expires_at": now + (
+                EARNINGS_CACHE_TTL_SECONDS if value else EARNINGS_RETRY_SECONDS
+            ),
+            "value": value,
+        }
+    return value
 
 
 def yahoo_json(url):
@@ -357,6 +406,17 @@ def fetch_stock(symbol, target_percent=1.0):
         if next_earnings:
             earnings_status = "ok_nasdaq_fallback"
             earnings_message = "Nasdaq supplied the date because Alpha Vantage was unavailable."
+    if not next_earnings:
+        next_earnings = yahoo_earnings(symbol)
+        if next_earnings:
+            earnings_status = (
+                "ok_yahoo_estimate" if next_earnings.get("isEstimate") else "ok_yahoo_fallback"
+            )
+            earnings_message = (
+                "Yahoo Finance supplied an estimated date."
+                if next_earnings.get("isEstimate")
+                else "Yahoo Finance supplied the announced date."
+            )
     return {
         "symbol": symbol,
         "name": meta.get("longName") or meta.get("shortName") or symbol,
