@@ -3,63 +3,119 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Stkopt Watchlist</title>
-  <link rel="stylesheet" href="styles.css?v=2">
-  <script src="app.js" defer></script>
+  <meta name="theme-color" content="#07040d">
+  <meta name="description" content="A high-signal stock and options watchlist for comparing put premium, downside cushion, earnings, and moving averages.">
+  <title>STK/OPT — Signal Desk</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=3">
+  <script src="app.js?v=3" defer></script>
 </head>
 <body>
+  <div class="ambient" aria-hidden="true">
+    <span class="ambient-orb ambient-orb--purple"></span>
+    <span class="ambient-orb ambient-orb--red"></span>
+    <span class="ambient-grid"></span>
+  </div>
+
   <header class="topbar">
-    <div class="brand"><span class="brand-mark">↗</span><span>CSP</span></div>
-    <div class="data-note"><span class="live-dot"></span>  quotes · Cboe opts · delayed</div>
+    <a class="brand" href="#top" aria-label="STK OPT home">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 36 36" role="img">
+          <path d="M7 25.5 14 18l5 4 10-12" />
+          <path d="M22 10h7v7" />
+        </svg>
+      </span>
+      <span class="brand-name">STK<span>/</span>OPT</span>
+    </a>
+
+    <nav class="topnav" aria-label="Primary navigation">
+      <a href="#watchlist-section">Watchlist</a>
+    </nav>
+
+    <div class="data-note"><span class="live-dot"></span><span>Market feed</span><strong>online</strong></div>
   </header>
-  <main class="shell">
-    <section class="intro">
-      <div>
-        <p class="eyebrow">Opt desk</p>
+
+  <main id="top" class="shell">
+    <section id="watchlist-section" class="watchlist-section">
+      <div class="section-heading">
+        <p>Rank the next two option expirations, then compare earnings risk and moving-average momentum. Juice is a comparison score that weights put-premium yield at two-thirds and downside cushion at one-third. It is a screening aid based on available market data—not financial advice.</p>
       </div>
-      <label class="target-badge" for="target-select"><span>Target prm/strik</span><select id="target-select" aria-label="Target premium to strike percentage"></select></label>
+
+      <div class="control-deck">
+        <form id="add-form" class="add-form">
+          <label class="input-shell" for="symbol-input">
+            <span>Ticker</span>
+            <input id="symbol-input" maxlength="8" placeholder="NVDA" autocomplete="off" spellcheck="false">
+          </label>
+          <button type="submit"><span aria-hidden="true">＋</span> Add stock</button>
+        </form>
+
+        <div class="filter-bank">
+          <label class="select-control target-badge" for="target-select">
+            <span>Target premium / strike</span>
+            <select id="target-select" aria-label="Target premium to strike percentage"></select>
+          </label>
+          <label class="select-control" for="juice-sort-select">
+            <span>Rank signals by</span>
+            <select id="juice-sort-select" aria-label="Juice column used to sort stocks">
+              <option value="nextFriday">First expiration</option>
+              <option value="followingFriday">Second expiration</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="toolbar-actions">
+          <span id="watch-count">0 stocks</span>
+          <button id="refresh" class="icon-button" type="button" title="Refresh watchlist" aria-label="Refresh watchlist">
+            <span aria-hidden="true">↻</span><b>Refresh</b>
+          </button>
+        </div>
+      </div>
+
+      <div class="table-shell">
+        <div class="table-chrome">
+          <span><i></i> Scanner output</span>
+          <span>Scroll horizontally to explore <b aria-hidden="true">→</b></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th class="stock-head">Stock</th>
+                <th class="price-head">Price</th>
+                <th class="group-head"><span id="next-friday-date"></span><small>Put signal</small></th>
+                <th class="single-head">Juice</th>
+                <th class="single-head">Next earnings</th>
+                <th class="group-head"><span id="following-friday-date"></span><small>Put signal</small></th>
+                <th class="single-head">Juice</th>
+                <th class="single-head">MA 15</th>
+                <th class="single-head">MA 30</th>
+                <th class="single-head">MA 50</th>
+                <th class="single-head">MA 70</th>
+                <th class="single-head">MA 90</th>
+                <th class="single-head">MA 100</th>
+                <th class="single-head">MA 120</th>
+                <th class="action-head"><span class="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody id="watchlist"></tbody>
+          </table>
+          <div id="empty-state" class="empty-state" hidden>
+            <div class="empty-icon">＋</div>
+            <h3>Your watchlist is quiet.</h3>
+            <p>Add a ticker above to start scanning option signals.</p>
+          </div>
+        </div>
+      </div>
     </section>
 
-    <section class="toolbar" aria-label="Watchlist controls">
-      <form id="add-form" class="add-form">
-        <label class="sr-only" for="symbol-input">Ticker symbol</label>
-        <input id="symbol-input" maxlength="8" placeholder="Add ticker, e.g. AAPL" autocomplete="off">
-        <button type="submit"><span>+</span> Add stk</button>
-      </form>
-      <div class="toolbar-actions">
-        <span id="watch-count">0 stks</span>
-        <button id="refresh" class="icon-button" type="button" title="Refresh watchlist" aria-label="Refresh watchlist">↻</button>
-      </div>
-    </section>
-
-    <section class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th class="stock-head">Stk</th>
-            <th class="price-head">Price</th>
-            <th class="group-head"><span id="next-friday-date"></span></th>
-            <th class="single-head">Juice</th>
-            <th class="group-head"><span id="following-friday-date"></span></th>
-            <th class="single-head">15</th>
-            <th class="single-head">30</th>
-            <th class="single-head">50</th>
-            <th class="single-head">70</th>
-            <th class="single-head">90</th>
-            <th class="single-head">100</th>
-            <th class="single-head">120</th>
-            <th class="action-head"></th>
-          </tr>
-        </thead>
-        <tbody id="watchlist"></tbody>
-      </table>
-      <div id="empty-state" class="empty-state">
-        <div class="empty-icon">＋</div>
-        <h2>Your watchlist is quiet.</h2>
-        <p>Add a ticker above to see its 1% premium-to-strike opts.</p>
-      </div>
-    </section>
-    <footer><span>Prices are delayed and for research only.</span><span>Last refresh <strong id="last-refresh">—</strong></span></footer>
+    <footer>
+      <div class="footer-brand">STK<span>/</span>OPT <small>Signal desk</small></div>
+      <p>Quotes from Yahoo Finance · Delayed options from Cboe · Research use only</p>
+      <p>Last refresh <strong id="last-refresh">—</strong></p>
+    </footer>
   </main>
 </body>
 </html>
