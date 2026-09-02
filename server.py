@@ -464,6 +464,6 @@ class Handler(SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     os.chdir(ROOT)
-    port = int(os.environ.get("PORT", "8000"))
+    port = int(os.environ.get("PORT", "8765"))
     print("Stockoption running on port %d" % port)
     ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
