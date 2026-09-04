@@ -293,9 +293,10 @@ def option_view(option):
 
 def cboe_option_view(option):
     bid = option.get("bid", 0) or 0
-    ask = option.get("ask", 0) or 0
     last = option.get("last_trade_price", 0) or 0
-    premium = (bid + ask) / 2 if bid > 0 and ask > 0 else last
+    # For a cash-secured put sale, the bid is the currently available
+    # premium. The bid/ask midpoint is not an executable seller price.
+    premium = bid if bid > 0 else last
     strike = option.get("strike", 0) or 0
     return {
         "premium": premium,
@@ -318,11 +319,44 @@ def qualifying_puts(puts, target_percent):
     target_ratio = target_percent / 100
     nearest = min(
         valid_puts,
-        key=lambda put: abs((put["lastPrice"] / put["strike"]) - target_ratio),
+        key=lambda put: abs(((put.get("bid", 0) or 0) / put["strike"]) - target_ratio),
     ) if valid_puts else None
     return {
         "middle": cboe_option_view(nearest) if nearest else None,
     }
+
+
+def previous_trading_close(meta, timestamps, closes, current_price):
+    """Return the close immediately before the regular-market price session.
+
+    Yahoo can publish a live regularMarketPrice before today's daily candle is
+    appended to the chart. In that case, the final candle is already the prior
+    close and must not be skipped.
+    """
+    dated_closes = [
+        (timestamp, close)
+        for timestamp, close in zip(timestamps, closes)
+        if close is not None
+    ]
+    if not dated_closes:
+        return meta.get("chartPreviousClose", 0) or 0
+
+    last_timestamp, last_close = dated_closes[-1]
+    market_timestamp = meta.get("regularMarketTime")
+    utc_offset = int(meta.get("gmtoffset", 0) or 0)
+
+    if market_timestamp:
+        market_date = datetime.utcfromtimestamp(market_timestamp + utc_offset).date()
+        last_bar_date = datetime.utcfromtimestamp(last_timestamp + utc_offset).date()
+        if last_bar_date != market_date:
+            return last_close
+        if len(dated_closes) >= 2:
+            return dated_closes[-2][1]
+
+    price_tolerance = max(0.01, abs(current_price or 0) * 0.001)
+    if abs((current_price or 0) - last_close) <= price_tolerance and len(dated_closes) >= 2:
+        return dated_closes[-2][1]
+    return last_close
 
 
 def fetch_stock(symbol, target_percent=1.0):
@@ -342,13 +376,10 @@ def fetch_stock(symbol, target_percent=1.0):
         clean_closes[-1] if clean_closes else 0
     )
     
-    # For a one-year chart, chartPreviousClose is the close before the
-    # one-year window, not the previous trading day's close.
-    previous_price = (
-        clean_closes[-2]
-        if len(clean_closes) >= 2
-        else meta.get("chartPreviousClose", 0)
-    )
+    # chartPreviousClose is the close before the one-year window, not the
+    # previous trading day. Match daily candles to the live quote session so
+    # intraday requests work whether today's candle exists yet or not.
+    previous_price = previous_trading_close(meta, timestamps, closes, price)
     
     change_percent = (
         ((price - previous_price) / previous_price) * 100
@@ -375,9 +406,6 @@ def fetch_stock(symbol, target_percent=1.0):
             row["expiration_date"] = expiration_date
             row["type"] = suffix[6]
             row["strike"] = int(suffix[7:]) / 1000
-            bid = row.get("bid", 0) or 0
-            ask = row.get("ask", 0) or 0
-            row["lastPrice"] = (bid + ask) / 2 if bid > 0 and ask > 0 else row.get("last_trade_price", 0)
             row["percentChange"] = row.get("percent_change", 0) or 0
             parsed_rows.append(row)
     except Exception:
