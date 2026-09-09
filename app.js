@@ -166,10 +166,14 @@ const rowOptions = (puts, stockPrice) => puts?.middle
   ? rowOption(puts.middle, stockPrice)
   : '<span class="option-empty">No qualifying put</span>';
 
-const metricCell = (stock, period) => {
-  const average = stock[`moving${period}`];
-  return `<td class="metric-cell"><span class="${movingClass(stock.price, average)}">${money(average)}</span><small>${movingDistance(stock.price, average)}</small></td>`;
-};
+const metricGroupCell = (stock, periods) => `<td class="metric-cell metric-group-cell">
+  <div class="metric-group">
+    ${periods.map((period) => {
+      const average = stock[`moving${period}`];
+      return `<div class="metric-line"><b>MA ${period}</b><span class="${movingClass(stock.price, average)}">${money(average)}</span><small>${movingDistance(stock.price, average)}</small></div>`;
+    }).join('')}
+  </div>
+</td>`;
 
 const rowTemplate = (stock) => {
   const nextOptions = stock.options?.nextFriday || {};
@@ -178,14 +182,14 @@ const rowTemplate = (stock) => {
   const safeSymbol = escapeHtml(stock.symbol);
 
   return `<tr>
-    <td class="stock-cell"><strong>${safeSymbol}</strong><span title="${escapeHtml(stock.name)}">${escapeHtml(stock.name)}</span></td>
+    <td class="stock-cell"><strong>${safeSymbol}</strong><span title="${escapeHtml(stock.name)}">${escapeHtml(stock.name)}</span><div class="stock-earnings"><b>Earnings</b>${earningsCell(stock.nextEarnings)}</div></td>
     <td class="price-cell"><span class="${changeClass}">${money(stock.price)}</span><small class="${changeClass}">${signedMoney(stock.priceChange)} / ${signedPercent(stock.change)}</small></td>
     <td class="option-cell">${rowOptions(nextOptions.puts, stock.price)}</td>
     <td class="juice-cell">${juiceCell(stock, 'nextFriday')}</td>
-    <td class="metric-cell earnings-cell">${earningsCell(stock.nextEarnings)}</td>
     <td class="option-cell">${rowOptions(followingOptions.puts, stock.price)}</td>
     <td class="juice-cell">${juiceCell(stock, 'followingFriday')}</td>
-    ${[15, 30, 50, 70, 90, 100, 120].map((period) => metricCell(stock, period)).join('')}
+    ${metricGroupCell(stock, [15, 30, 50])}
+    ${metricGroupCell(stock, [90, 120])}
     <td class="remove-cell"><button class="remove" data-symbol="${safeSymbol}" title="Remove ${safeSymbol}" aria-label="Remove ${safeSymbol}">×</button></td>
   </tr>`;
 };
@@ -193,7 +197,7 @@ const rowTemplate = (stock) => {
 function renderLoading(symbol) {
   list.insertAdjacentHTML('beforeend', `<tr class="loading" data-loading="${escapeHtml(symbol)}">
     <td class="stock-cell"><strong>${escapeHtml(symbol)}</strong><span>Scanning market data…</span></td>
-    <td colspan="13"><div class="loading-bar"></div></td><td></td>
+    <td colspan="7"><div class="loading-bar"></div></td><td></td>
   </tr>`);
 }
 
@@ -212,7 +216,7 @@ function renderResults(results) {
 
   list.innerHTML = [
     ...stocks.map(rowTemplate),
-    ...errors.map((result) => `<tr class="error-row"><td colspan="15">${escapeHtml(result.symbol)}: ${escapeHtml(result.error)}. Check the ticker and refresh.</td></tr>`),
+    ...errors.map((result) => `<tr class="error-row"><td colspan="9">${escapeHtml(result.symbol)}: ${escapeHtml(result.error)}. Check the ticker and refresh.</td></tr>`),
   ].join('');
 }
 
