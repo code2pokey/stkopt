@@ -1033,7 +1033,7 @@ a {
 
 table {
   width: 100%;
-  min-width: 1590px;
+  min-width: 1080px;
   border-collapse: separate;
   border-spacing: 0;
   text-align: left;
@@ -1041,8 +1041,8 @@ table {
 
 th,
 td {
-  border-right: 1px solid rgba(190, 128, 255, 0.1);
-  border-bottom: 1px solid rgba(190, 128, 255, 0.1);
+  border-right: 1px solid rgba(194, 132, 255, 0.18);
+  border-bottom: 1px solid rgba(194, 132, 255, 0.18);
 }
 
 th:last-child,
@@ -1061,10 +1061,11 @@ thead th {
   white-space: nowrap;
 }
 
-.stock-head { width: 150px; }
+.stock-head { width: 180px; }
 .price-head { width: 110px; }
 .group-head { width: 200px; color: var(--purple-bright); }
 .single-head { width: 124px; }
+.ma-group-head { width: 205px; }
 .action-head { width: 48px; }
 
 .group-head span {
@@ -1128,6 +1129,47 @@ tbody tr:last-child td {
   white-space: nowrap;
 }
 
+.stock-earnings {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 4px 7px;
+  margin-top: 12px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(194, 132, 255, 0.14);
+}
+
+.stock-earnings > b {
+  color: var(--muted-2);
+  font: 500 7px var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.stock-earnings > span {
+  justify-self: start;
+  padding: 3px 5px;
+  background: rgba(255, 255, 255, 0.025);
+  font: 500 9px var(--font-mono);
+}
+
+.stock-earnings > small {
+  grid-column: 2;
+  overflow: hidden;
+  color: var(--muted-2);
+  font: 7px var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stock-earnings > span.negative {
+  background: var(--red-soft);
+}
+
+.stock-earnings > span.positive {
+  background: var(--green-soft);
+}
+
 .price-cell,
 .juice-cell,
 .metric-cell {
@@ -1156,6 +1198,45 @@ tbody tr:last-child td {
   font: 8px var(--font-mono);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.metric-group-cell {
+  min-width: 205px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.metric-group {
+  display: grid;
+  gap: 8px;
+}
+
+.metric-line {
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  align-items: center;
+  gap: 3px 7px;
+}
+
+.metric-line + .metric-line {
+  padding-top: 8px;
+  border-top: 1px solid rgba(194, 132, 255, 0.14);
+}
+
+.metric-line b {
+  color: var(--muted-2);
+  font: 500 7px var(--font-mono);
+}
+
+.metric-line > span {
+  justify-self: start;
+  padding: 3px 5px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.metric-line small {
+  grid-column: 2;
+  margin-top: 0;
 }
 
 .positive {
