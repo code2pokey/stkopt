@@ -113,6 +113,8 @@ const movingDistance = (price, average) => {
 
 const movingClass = (price, average) => !price || !average ? '' : price >= average ? 'positive' : 'negative';
 
+const downsideClass = (stockPrice, strike) => Number(strike) < Number(stockPrice) ? '' : 'negative';
+
 const optionJuice = (stock, expirationKey) => {
   const option = stock?.options?.[expirationKey]?.puts?.middle;
   if (!stock?.price || !option?.strike || !option?.premium) return null;
@@ -126,7 +128,7 @@ const juiceCell = (stock, expirationKey) => {
   const juice = optionJuice(stock, expirationKey);
   if (juice == null) return '<span>—</span><small>No rank</small>';
   const downsideCushion = Math.max(((stock.price - option.strike) / stock.price) * 100, 0);
-  return `<span>${(juice * 100).toFixed(2)}%</span><small>${money(option.premium)} · ${downsideCushion.toFixed(2)}% below</small>`;
+  return `<span>${(juice * 100).toFixed(2)}%</span><small class="${downsideClass(stock.price, option.strike)}">${money(option.premium)} · ${downsideCushion.toFixed(2)}% below</small>`;
 };
 
 const earningsCell = (earnings) => {
@@ -157,7 +159,7 @@ const rowOption = (option, stockPrice) => {
   const downside = Math.max(((stockPrice - option.strike) / stockPrice) * 100, 0).toFixed(2);
   return `<div class="put-line">
     <span class="option-main"><b>${money(option.premium)}</b><em>/</em>${money(option.strike)}</span>
-    <span class="option-underlying">Spot ${money(stockPrice)} · ${downside}% below</span>
+    <span class="option-underlying ${downsideClass(stockPrice, option.strike)}">Spot ${money(stockPrice)} · ${downside}% below</span>
     <span class="option-stats">V ${Number(option.volume || 0).toLocaleString()} · OI ${Number(option.openInterest || 0).toLocaleString()} · IV ${signedPercent(Number(option.impliedVolatility || 0) * 100)} · R ${Number(option.ratio || 0).toFixed(2)}%</span>
   </div>`;
 };
