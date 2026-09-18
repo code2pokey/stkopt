@@ -770,6 +770,37 @@ a {
   scroll-margin-top: 28px;
 }
 
+.market-losers-section {
+  padding: 0 0 90px;
+  scroll-margin-top: 28px;
+}
+
+.market-losers-heading {
+  padding-top: 10px;
+}
+
+.market-losers-heading .eyebrow {
+  margin: 0;
+  color: var(--purple-bright);
+  font: 8px var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.market-losers-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  color: var(--muted);
+  font: 9px var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.market-losers-meta span:first-child {
+  color: var(--red);
+}
+
 .section-heading {
   display: flex;
   align-items: flex-end;
@@ -1171,6 +1202,7 @@ tbody tr:last-child td {
 }
 
 .price-cell,
+.market-cap-cell,
 .juice-cell,
 .metric-cell {
   padding: 18px 13px;
@@ -1180,6 +1212,7 @@ tbody tr:last-child td {
 }
 
 .price-cell > span,
+.market-cap-cell > span,
 .juice-cell > span,
 .metric-cell > span {
   display: inline-block;
@@ -1188,6 +1221,7 @@ tbody tr:last-child td {
 }
 
 .price-cell small,
+.market-cap-cell small,
 .juice-cell small,
 .metric-cell small {
   display: block;
@@ -1198,6 +1232,14 @@ tbody tr:last-child td {
   font: 8px var(--font-mono);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.market-cap-cell {
+  min-width: 124px;
+}
+
+.market-cap-cell > span {
+  color: var(--ink);
 }
 
 .metric-group-cell {
@@ -1572,6 +1614,7 @@ footer strong {
   .overview-card { min-height: 119px; padding: 22px 18px; }
   .overview-card strong { font-size: 22px; }
   .watchlist-section { padding: 90px 0 70px; }
+  .market-losers-section { padding-bottom: 70px; }
   .section-heading { align-items: flex-start; flex-direction: column; gap: 18px; }
   .section-heading > p { font-size: 12px; }
   .control-deck { display: flex; align-items: stretch; flex-direction: column; }
