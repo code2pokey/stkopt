@@ -10,8 +10,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=6">
-  <script src="app.js?v=7" defer></script>
+  <link rel="stylesheet" href="styles.css?v=8">
+  <script src="app.js?v=13" defer></script>
 </head>
 <body>
   <div class="ambient" aria-hidden="true">
@@ -101,6 +101,82 @@
             <div class="empty-icon">＋</div>
             <h3>Your watchlist is quiet.</h3>
             <p>Add a ticker above to start scanning option signals.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="market-losers-section" class="market-losers-section" aria-label="Daily stock drop scanner">
+      <div class="market-losers-filter-deck">
+        <div class="filter-bank market-losers-filters">
+          <label class="select-control target-badge" for="market-cap-select">
+            <span>Minimum market cap</span>
+            <select id="market-cap-select" aria-label="Minimum market cap in billions of dollars">
+              <option value="1">$1B</option>
+              <option value="2">$2B</option>
+              <option value="5">$5B</option>
+              <option value="10">$10B</option>
+              <option value="25">$25B</option>
+              <option value="50">$50B</option>
+              <option value="100">$100B</option>
+              <option value="250">$250B</option>
+            </select>
+          </label>
+          <label class="select-control" for="drop-percent-select">
+            <span>Minimum daily drop</span>
+            <select id="drop-percent-select" aria-label="Minimum daily percentage drop">
+              <option value="5">5%</option>
+              <option value="7.5">7.5%</option>
+              <option value="10">10%</option>
+              <option value="12.5">12.5%</option>
+              <option value="15">15%</option>
+              <option value="20">20%</option>
+              <option value="25">25%</option>
+              <option value="30">30%</option>
+            </select>
+          </label>
+          <label class="select-control" for="market-juice-sort-select">
+            <span>Rank signals by</span>
+            <select id="market-juice-sort-select" aria-label="Juice column used to sort the daily drop scanner">
+              <option value="nextFriday">First expiration</option>
+              <option value="followingFriday">Second expiration</option>
+            </select>
+          </label>
+        </div>
+        <p>Top 10 stocks matching the selected daily-drop and market-cap filters. Put signals use the same premium target and next two expirations as the watchlist.</p>
+      </div>
+
+      <div class="market-losers-meta">
+        <span id="market-losers-count">Scanning market...</span>
+        <span>Return &gt; 0.80% · ranked by selected Juice expiration</span>
+      </div>
+
+      <div id="market-losers-shell" class="table-shell" aria-busy="true">
+        <div class="table-chrome">
+          <span><i></i> Daily drop scanner</span>
+          <span>Scroll horizontally to explore <b aria-hidden="true">&rarr;</b></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th class="stock-head">Stock</th>
+                <th class="price-head">Price</th>
+                <th class="single-head">Market cap</th>
+                <th class="group-head"><span id="losers-next-friday-date"></span><small>Put signal</small></th>
+                <th class="single-head">Juice</th>
+                <th class="group-head"><span id="losers-following-friday-date"></span><small>Put signal</small></th>
+                <th class="single-head">Juice</th>
+                <th class="single-head ma-group-head">MA 15 / 30 / 50</th>
+                <th class="single-head ma-group-head">MA 90 / 120</th>
+              </tr>
+            </thead>
+            <tbody id="market-losers"></tbody>
+          </table>
+          <div id="market-losers-empty" class="empty-state" hidden>
+            <div class="empty-icon">&minus;</div>
+            <h3>No stocks match today.</h3>
+            <p id="market-losers-empty-message">No stocks currently match the selected filters.</p>
           </div>
         </div>
       </div>
