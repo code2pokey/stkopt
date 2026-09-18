@@ -37,6 +37,11 @@ YAHOO_EARNINGS_LOCK = threading.Lock()
 MARKET_LOSERS_CACHE_TTL_SECONDS = 5 * 60
 MARKET_LOSERS_CACHE = {"expires_at": 0, "quotes": []}
 MARKET_LOSERS_LOCK = threading.Lock()
+CBOE_CACHE_TTL_SECONDS = 2 * 60
+CBOE_CACHE = {}
+CBOE_CACHE_LOCK = threading.Lock()
+CBOE_SYMBOL_LOCKS = {}
+CBOE_FETCH_SEMAPHORE = threading.BoundedSemaphore(4)
 
 
 def earnings_calendar():
@@ -260,6 +265,41 @@ def yahoo_json(url):
 
 
 def cboe_json(symbol):
+    now = time.time()
+    with CBOE_CACHE_LOCK:
+        cached = CBOE_CACHE.get(symbol)
+        if cached and cached["expires_at"] > now:
+            return cached["value"]
+        symbol_lock = CBOE_SYMBOL_LOCKS.setdefault(symbol, threading.Lock())
+
+    with symbol_lock:
+        now = time.time()
+        with CBOE_CACHE_LOCK:
+            cached = CBOE_CACHE.get(symbol)
+            if cached and cached["expires_at"] > now:
+                return cached["value"]
+
+        try:
+            with CBOE_FETCH_SEMAPHORE:
+                value = uncached_cboe_json(symbol)
+        except Exception:
+            # A recently expired response is safer than dropping every option
+            # row when Cboe temporarily rate-limits a refresh.
+            with CBOE_CACHE_LOCK:
+                stale = CBOE_CACHE.get(symbol)
+                if stale:
+                    return stale["value"]
+            raise
+
+        with CBOE_CACHE_LOCK:
+            CBOE_CACHE[symbol] = {
+                "expires_at": now + CBOE_CACHE_TTL_SECONDS,
+                "value": value,
+            }
+        return value
+
+
+def uncached_cboe_json(symbol):
     url = "https://cdn.cboe.com/api/global/delayed_quotes/options/" + urllib.parse.quote(symbol) + ".json"
     request = urllib.request.Request(url, headers=YAHOO_HEADERS)
     with urllib.request.urlopen(request, timeout=15) as response:
@@ -520,19 +560,22 @@ def fetch_market_losers(
     target_percent=1.0,
     minimum_market_cap=10_000_000_000,
     drop_percent=10,
+    rank_expiration="nextFriday",
+    minimum_return_percent=0.8,
     limit=10,
 ):
-    """Enrich up to ten qualifying daily losers with the standard stock view."""
+    """Filter and rank daily losers before applying the final row limit."""
+    candidate_limit = 50
     candidates = market_loser_candidates(
         minimum_market_cap,
         drop_percent,
-        min(limit, 10),
+        candidate_limit,
     )
     if not candidates:
         return []
 
     stocks = []
-    worker_count = min(5, len(candidates))
+    worker_count = min(8, len(candidates))
     with ThreadPoolExecutor(max_workers=worker_count) as executor:
         futures = {
             executor.submit(fetch_stock, candidate["symbol"], target_percent): candidate
@@ -558,7 +601,35 @@ def fetch_market_losers(
                 stock["priceChange"] = candidate["priceChange"]
             stocks.append(stock)
 
-    return sorted(stocks, key=lambda stock: stock["change"])[:limit]
+    def selected_option(stock):
+        return (
+            stock.get("options", {})
+            .get(rank_expiration, {})
+            .get("puts", {})
+            .get("middle")
+        )
+
+    def juice_score(stock):
+        option = selected_option(stock)
+        if not option:
+            return float("-inf")
+        price = stock.get("price") or 0
+        strike = option.get("strike") or 0
+        premium = option.get("premium") or 0
+        if price <= 0 or strike <= 0 or premium <= 0:
+            return float("-inf")
+        premium_yield = premium / strike
+        strike_distance = abs((price - strike) / price)
+        score = (premium_yield * (2 / 3)) + (strike_distance * (1 / 3))
+        return -score if strike > price else score
+
+    qualifying_stocks = [
+        stock for stock in stocks
+        if selected_option(stock)
+        and (selected_option(stock).get("ratio") or 0) > minimum_return_percent
+    ]
+    qualifying_stocks.sort(key=juice_score, reverse=True)
+    return qualifying_stocks[:min(limit, 10)]
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -569,23 +640,32 @@ class Handler(SimpleHTTPRequestHandler):
             target = query.get("target", ["1.0"])[0]
             market_cap_billions = query.get("marketCapBillions", ["10"])[0]
             drop_percent = query.get("dropPercent", ["10"])[0]
+            rank_expiration = query.get("rankExpiration", ["nextFriday"])[0]
+            minimum_return_percent = query.get("minimumReturnPercent", ["0.8"])[0]
             try:
                 target = float(target)
                 market_cap_billions = float(market_cap_billions)
                 drop_percent = float(drop_percent)
-                if market_cap_billions <= 0 or drop_percent <= 0:
-                    raise ValueError("Market cap and drop percentage must be greater than zero")
+                minimum_return_percent = float(minimum_return_percent)
+                if rank_expiration not in ("nextFriday", "followingFriday"):
+                    raise ValueError("Rank expiration must be nextFriday or followingFriday")
+                if market_cap_billions <= 0 or drop_percent <= 0 or minimum_return_percent < 0:
+                    raise ValueError("Market cap and filter percentages must be valid")
                 minimum_market_cap = int(market_cap_billions * 1_000_000_000)
                 payload = {
                     "stocks": fetch_market_losers(
                         target,
                         minimum_market_cap,
                         drop_percent,
+                        rank_expiration,
+                        minimum_return_percent,
                         10,
                     ),
                     "criteria": {
                         "changePercentBelow": -drop_percent,
                         "minimumMarketCap": minimum_market_cap,
+                        "minimumReturnPercent": minimum_return_percent,
+                        "rankExpiration": rank_expiration,
                         "limit": 10,
                     },
                 }
