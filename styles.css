@@ -775,16 +775,24 @@ a {
   scroll-margin-top: 28px;
 }
 
-.market-losers-heading {
-  padding-top: 10px;
+.market-losers-filter-deck {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 40px;
+  margin-bottom: 24px;
 }
 
-.market-losers-heading .eyebrow {
+.market-losers-filter-deck > p {
+  max-width: 450px;
   margin: 0;
-  color: var(--purple-bright);
-  font: 8px var(--font-mono);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.market-losers-filters {
+  flex-shrink: 0;
 }
 
 .market-losers-meta {
@@ -1615,6 +1623,9 @@ footer strong {
   .overview-card strong { font-size: 22px; }
   .watchlist-section { padding: 90px 0 70px; }
   .market-losers-section { padding-bottom: 70px; }
+  .market-losers-filter-deck { align-items: stretch; flex-direction: column; gap: 18px; }
+  .market-losers-filter-deck > p { font-size: 12px; }
+  .market-losers-filters { display: grid; grid-template-columns: 1fr 1fr; }
   .section-heading { align-items: flex-start; flex-direction: column; gap: 18px; }
   .section-heading > p { font-size: 12px; }
   .control-deck { display: flex; align-items: stretch; flex-direction: column; }
@@ -1637,6 +1648,7 @@ footer strong {
 
 @media (max-width: 480px) {
   .filter-bank { grid-template-columns: 1fr; }
+  .market-losers-filters { grid-template-columns: 1fr; }
   .add-form { flex-direction: column; }
   .add-form button { min-height: 49px; }
   .overview { grid-template-columns: 1fr; }
