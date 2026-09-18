@@ -34,6 +34,9 @@ NASDAQ_EARNINGS_CACHE = {"expires_at": 0, "by_symbol": {}}
 NASDAQ_EARNINGS_LOCK = threading.Lock()
 YAHOO_EARNINGS_CACHE = {}
 YAHOO_EARNINGS_LOCK = threading.Lock()
+MARKET_LOSERS_CACHE_TTL_SECONDS = 5 * 60
+MARKET_LOSERS_CACHE = {"expires_at": 0, "candidates": []}
+MARKET_LOSERS_LOCK = threading.Lock()
 
 
 def earnings_calendar():
@@ -263,6 +266,56 @@ def cboe_json(symbol):
         return json.loads(response.read().decode("utf-8"))
 
 
+def market_loser_candidates(limit=10):
+    """Return today's steepest US-listed equity decliners above $10B."""
+    now = time.time()
+    if MARKET_LOSERS_CACHE["expires_at"] > now:
+        return MARKET_LOSERS_CACHE["candidates"][:limit]
+
+    with MARKET_LOSERS_LOCK:
+        now = time.time()
+        if MARKET_LOSERS_CACHE["expires_at"] > now:
+            return MARKET_LOSERS_CACHE["candidates"][:limit]
+
+        query = urllib.parse.urlencode({
+            "formatted": "false",
+            "scrIds": "day_losers",
+            "count": 250,
+            "start": 0,
+        })
+        payload = yahoo_json(
+            "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?" + query
+        )
+        results = payload.get("finance", {}).get("result") or []
+        quotes = results[0].get("quotes", []) if results else []
+        candidates = []
+        for quote in quotes:
+            symbol = (quote.get("symbol") or "").upper().strip()
+            market_cap = quote.get("marketCap") or 0
+            change = quote.get("regularMarketChangePercent")
+            if (
+                symbol
+                and quote.get("quoteType") == "EQUITY"
+                and market_cap >= 10_000_000_000
+                and change is not None
+                and change < -10
+            ):
+                candidates.append({
+                    "symbol": symbol,
+                    "marketCap": market_cap,
+                    "change": change,
+                    "price": quote.get("regularMarketPrice"),
+                    "priceChange": quote.get("regularMarketChange"),
+                })
+
+        candidates.sort(key=lambda item: item["change"])
+        MARKET_LOSERS_CACHE.update({
+            "expires_at": now + MARKET_LOSERS_CACHE_TTL_SECONDS,
+            "candidates": candidates,
+        })
+        return candidates[:limit]
+
+
 def closest_option(options, target_ratio):
     if not options:
         return None
@@ -466,9 +519,66 @@ def fetch_stock(symbol, target_percent=1.0):
     }
 
 
+def fetch_market_losers(target_percent=1.0, limit=10):
+    """Enrich up to ten qualifying daily losers with the standard stock view."""
+    candidates = market_loser_candidates(min(limit, 10))
+    if not candidates:
+        return []
+
+    stocks = []
+    worker_count = min(5, len(candidates))
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        futures = {
+            executor.submit(fetch_stock, candidate["symbol"], target_percent): candidate
+            for candidate in candidates
+        }
+        for future in as_completed(futures):
+            candidate = futures[future]
+            try:
+                stock = future.result()
+            except Exception as error:
+                print("Market loser detail error for %s: %s" % (
+                    candidate["symbol"], str(error)[:180]
+                ))
+                continue
+
+            # Use the screener snapshot for the fields that define membership,
+            # so every displayed row continues to match the advertised filter.
+            stock["marketCap"] = candidate["marketCap"]
+            stock["change"] = candidate["change"]
+            if candidate["price"] is not None:
+                stock["price"] = candidate["price"]
+            if candidate["priceChange"] is not None:
+                stock["priceChange"] = candidate["priceChange"]
+            stocks.append(stock)
+
+    return sorted(stocks, key=lambda stock: stock["change"])[:limit]
+
+
 class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/api/market-losers":
+            target = urllib.parse.parse_qs(parsed.query).get("target", ["1.0"])[0]
+            try:
+                payload = {
+                    "stocks": fetch_market_losers(float(target), 10),
+                    "criteria": {
+                        "maximumChangePercent": -10,
+                        "minimumMarketCap": 10_000_000_000,
+                        "limit": 10,
+                    },
+                }
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+            except Exception as error:
+                body = json.dumps({"error": str(error)}).encode("utf-8")
+                self.send_response(502)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if parsed.path == "/api/stock":
             symbol = urllib.parse.parse_qs(parsed.query).get("symbol", [""])[0]
             target = urllib.parse.parse_qs(parsed.query).get("target", ["1.0"])[0]
