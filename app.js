@@ -330,6 +330,7 @@ async function loadMarketLosers() {
     marketCapBillions: String(minimumMarketCapBillions),
     dropPercent: String(minimumDropPercent),
     rankExpiration: marketJuiceSortExpiration,
+    minimumReturnPercent: String(minimumOptionReturnPercent),
   });
 
   try {
