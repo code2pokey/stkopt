@@ -44,6 +44,10 @@ const refreshButton = document.querySelector('#refresh');
 const lastRefresh = document.querySelector('#last-refresh');
 const targetSelect = document.querySelector('#target-select');
 const juiceSortSelect = document.querySelector('#juice-sort-select');
+const marketLosersList = document.querySelector('#market-losers');
+const marketLosersEmpty = document.querySelector('#market-losers-empty');
+const marketLosersCount = document.querySelector('#market-losers-count');
+const marketLosersShell = document.querySelector('#market-losers-shell');
 
 const storageKey = 'stockoption-watchlist';
 const targetStorageKey = 'stockoption-target-percent';
@@ -75,6 +79,8 @@ followingFriday.setDate(followingFriday.getDate() + 7);
 const formatFriday = (date) => `${date.toLocaleDateString('en-US', { month: 'short' })} ${String(date.getDate()).padStart(2, '0')}`;
 document.querySelector('#next-friday-date').textContent = formatFriday(nextFriday);
 document.querySelector('#following-friday-date').textContent = formatFriday(followingFriday);
+document.querySelector('#losers-next-friday-date').textContent = formatFriday(nextFriday);
+document.querySelector('#losers-following-friday-date').textContent = formatFriday(followingFriday);
 
 for (let value = 0.1; value <= 5; value += 0.1) {
   const percent = value.toFixed(2);
@@ -93,6 +99,13 @@ const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character
 }[character]));
 
 const money = (value) => value == null || Number.isNaN(Number(value)) ? '—' : `$${Number(value).toFixed(2)}`;
+
+const marketCap = (value) => {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '—';
+  if (number >= 1e12) return `$${(number / 1e12).toFixed(2)}T`;
+  return `$${(number / 1e9).toFixed(1)}B`;
+};
 
 const signedPercent = (value) => {
   if (value == null || Number.isNaN(Number(value))) return '—';
@@ -196,6 +209,24 @@ const rowTemplate = (stock) => {
   </tr>`;
 };
 
+const marketLoserRowTemplate = (stock) => {
+  const nextOptions = stock.options?.nextFriday || {};
+  const followingOptions = stock.options?.followingFriday || {};
+  const safeSymbol = escapeHtml(stock.symbol);
+
+  return `<tr>
+    <td class="stock-cell"><strong>${safeSymbol}</strong><span title="${escapeHtml(stock.name)}">${escapeHtml(stock.name)}</span><div class="stock-earnings"><b>Earnings</b>${earningsCell(stock.nextEarnings)}</div></td>
+    <td class="price-cell"><span class="negative">${money(stock.price)}</span><small class="negative">${signedMoney(stock.priceChange)} / ${signedPercent(stock.change)}</small></td>
+    <td class="market-cap-cell"><span>${marketCap(stock.marketCap)}</span><small>Minimum $10B</small></td>
+    <td class="option-cell">${rowOptions(nextOptions.puts, stock.price)}</td>
+    <td class="juice-cell">${juiceCell(stock, 'nextFriday')}</td>
+    <td class="option-cell">${rowOptions(followingOptions.puts, stock.price)}</td>
+    <td class="juice-cell">${juiceCell(stock, 'followingFriday')}</td>
+    ${metricGroupCell(stock, [15, 30, 50])}
+    ${metricGroupCell(stock, [90, 120])}
+  </tr>`;
+};
+
 function renderLoading(symbol) {
   list.insertAdjacentHTML('beforeend', `<tr class="loading" data-loading="${escapeHtml(symbol)}">
     <td class="stock-cell"><strong>${escapeHtml(symbol)}</strong><span>Scanning market data…</span></td>
@@ -222,10 +253,27 @@ function renderResults(results) {
   ].join('');
 }
 
+function renderMarketLosers(stocks, error = '') {
+  if (error) {
+    marketLosersList.innerHTML = `<tr class="error-row"><td colspan="9">Large-cap decline scan: ${escapeHtml(error)}. Try refreshing.</td></tr>`;
+    marketLosersEmpty.hidden = true;
+    marketLosersCount.textContent = 'Scan unavailable';
+    return;
+  }
+
+  const rankedStocks = [...stocks]
+    .sort((left, right) => Number(left.change) - Number(right.change))
+    .slice(0, 10);
+  marketLosersList.innerHTML = rankedStocks.map(marketLoserRowTemplate).join('');
+  marketLosersEmpty.hidden = rankedStocks.length > 0;
+  marketLosersCount.textContent = `${rankedStocks.length} ${rankedStocks.length === 1 ? 'match' : 'matches'} today`;
+}
+
 function setLoading(isLoading) {
   refreshButton.classList.toggle('is-loading', isLoading);
   refreshButton.disabled = isLoading;
   document.querySelector('.table-shell').setAttribute('aria-busy', String(isLoading));
+  marketLosersShell.setAttribute('aria-busy', String(isLoading));
 }
 
 function updateCounts() {
@@ -236,18 +284,19 @@ async function loadAll() {
   const sequence = ++requestSequence;
   latestResults = [];
   list.innerHTML = '';
+  marketLosersList.innerHTML = `<tr class="loading">
+    <td class="stock-cell"><strong>TOP 10</strong><span>Scanning large-cap declines...</span></td>
+    <td colspan="8"><div class="loading-bar"></div></td>
+  </tr>`;
+  marketLosersEmpty.hidden = true;
+  marketLosersCount.textContent = 'Scanning market...';
   emptyState.hidden = symbols.length > 0;
   updateCounts();
-
-  if (!symbols.length) {
-    setLoading(false);
-    return;
-  }
 
   setLoading(true);
   symbols.forEach(renderLoading);
 
-  const results = await Promise.all(symbols.map(async (symbol) => {
+  const watchlistRequest = Promise.all(symbols.map(async (symbol) => {
     try {
       const response = await fetch(`/api/stock?symbol=${encodeURIComponent(symbol)}&target=${targetPercent}`);
       const data = await response.json();
@@ -258,9 +307,20 @@ async function loadAll() {
     }
   }));
 
+  const marketLosersRequest = fetch(`/api/market-losers?target=${targetPercent}`)
+    .then(async (response) => {
+      const data = await response.json();
+      if (!response.ok || data.error) throw new Error(data.error || 'Market feed returned no data');
+      return { stocks: Array.isArray(data.stocks) ? data.stocks : [] };
+    })
+    .catch((error) => ({ stocks: [], error: error.message }));
+
+  const [results, loserResults] = await Promise.all([watchlistRequest, marketLosersRequest]);
+
   if (sequence !== requestSequence) return;
   latestResults = results;
   renderResults(results);
+  renderMarketLosers(loserResults.stocks, loserResults.error);
   const refreshedAt = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   lastRefresh.textContent = refreshedAt;
   setLoading(false);
