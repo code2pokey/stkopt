@@ -44,14 +44,22 @@ const refreshButton = document.querySelector('#refresh');
 const lastRefresh = document.querySelector('#last-refresh');
 const targetSelect = document.querySelector('#target-select');
 const juiceSortSelect = document.querySelector('#juice-sort-select');
+const marketJuiceSortSelect = document.querySelector('#market-juice-sort-select');
 const marketLosersList = document.querySelector('#market-losers');
 const marketLosersEmpty = document.querySelector('#market-losers-empty');
+const marketLosersEmptyMessage = document.querySelector('#market-losers-empty-message');
 const marketLosersCount = document.querySelector('#market-losers-count');
 const marketLosersShell = document.querySelector('#market-losers-shell');
+const marketCapSelect = document.querySelector('#market-cap-select');
+const dropPercentSelect = document.querySelector('#drop-percent-select');
 
 const storageKey = 'stockoption-watchlist';
 const targetStorageKey = 'stockoption-target-percent';
 const juiceSortStorageKey = 'stockoption-juice-sort-expiration';
+const marketJuiceSortStorageKey = 'stockoption-market-juice-sort-expiration';
+const marketCapStorageKey = 'stockoption-minimum-market-cap-billions';
+const dropPercentStorageKey = 'stockoption-minimum-drop-percent';
+const minimumOptionReturnPercent = 0.80;
 const defaultSymbols = ['OKLO', 'IREN', 'ASTS', 'INTC', 'CBRS', 'BE', 'NVDA', 'ALAB', 'TSLA', 'AAOI', 'CRDO', 'NBIS', 'MRVL', 'LUNR'];
 
 function storedSymbols() {
@@ -65,11 +73,18 @@ function storedSymbols() {
 
 let symbols = storedSymbols();
 let targetPercent = Number(localStorage.getItem(targetStorageKey) || '1.00');
-let juiceSortExpiration = localStorage.getItem(juiceSortStorageKey) === 'followingFriday'
+let minimumMarketCapBillions = Number(localStorage.getItem(marketCapStorageKey) || '10');
+let minimumDropPercent = Number(localStorage.getItem(dropPercentStorageKey) || '10');
+let watchlistJuiceSortExpiration = localStorage.getItem(juiceSortStorageKey) === 'followingFriday'
+  ? 'followingFriday'
+  : 'nextFriday';
+let marketJuiceSortExpiration = localStorage.getItem(marketJuiceSortStorageKey) === 'followingFriday'
   ? 'followingFriday'
   : 'nextFriday';
 let requestSequence = 0;
+let marketLosersRequestSequence = 0;
 let latestResults = [];
+let latestMarketLosers = [];
 
 const nextFriday = new Date();
 const daysToFriday = (5 - nextFriday.getDay() + 7) % 7 || 7;
@@ -88,7 +103,19 @@ for (let value = 0.1; value <= 5; value += 0.1) {
 }
 
 targetSelect.value = targetPercent.toFixed(2);
-juiceSortSelect.value = juiceSortExpiration;
+juiceSortSelect.value = watchlistJuiceSortExpiration;
+marketJuiceSortSelect.value = marketJuiceSortExpiration;
+marketCapSelect.value = String(minimumMarketCapBillions);
+dropPercentSelect.value = String(minimumDropPercent);
+
+if (!marketCapSelect.value) {
+  minimumMarketCapBillions = 10;
+  marketCapSelect.value = '10';
+}
+if (!dropPercentSelect.value) {
+  minimumDropPercent = 10;
+  dropPercentSelect.value = '10';
+}
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (character) => ({
   '&': '&amp;',
@@ -126,22 +153,30 @@ const movingDistance = (price, average) => {
 
 const movingClass = (price, average) => !price || !average ? '' : price >= average ? 'positive' : 'negative';
 
-const downsideClass = (stockPrice, strike) => Number(strike) < Number(stockPrice) ? '' : 'negative';
+const downsideClass = (stockPrice, strike) => Number(strike) <= Number(stockPrice) ? '' : 'negative';
+
+const strikeDistance = (stockPrice, strike) => {
+  if (!stockPrice || !strike) return { label: '—' };
+  const percent = ((Number(stockPrice) - Number(strike)) / Number(stockPrice)) * 100;
+  return { label: `${Math.abs(percent).toFixed(2)}% ${percent >= 0 ? 'below' : 'above'}` };
+};
 
 const optionJuice = (stock, expirationKey) => {
   const option = stock?.options?.[expirationKey]?.puts?.middle;
   if (!stock?.price || !option?.strike || !option?.premium) return null;
   const premiumYield = option.premium / option.strike;
-  const downsideCushion = Math.max((stock.price - option.strike) / stock.price, 0);
-  return (premiumYield * (2 / 3)) + (downsideCushion * (1 / 3));
+  const strikeDistanceRatio = Math.abs((stock.price - option.strike) / stock.price);
+  const score = (premiumYield * (2 / 3)) + (strikeDistanceRatio * (1 / 3));
+  return option.strike > stock.price ? -score : score;
 };
 
 const juiceCell = (stock, expirationKey) => {
   const option = stock?.options?.[expirationKey]?.puts?.middle;
   const juice = optionJuice(stock, expirationKey);
   if (juice == null) return '<span>—</span><small>No rank</small>';
-  const downsideCushion = Math.max(((stock.price - option.strike) / stock.price) * 100, 0);
-  return `<span>${(juice * 100).toFixed(2)}%</span><small class="${downsideClass(stock.price, option.strike)}">${money(option.premium)} · ${downsideCushion.toFixed(2)}% below</small>`;
+  const distance = strikeDistance(stock.price, option.strike);
+  const juiceClass = juice < 0 ? 'negative' : '';
+  return `<span class="${juiceClass}">${(juice * 100).toFixed(2)}%</span><small class="${downsideClass(stock.price, option.strike)}">${money(option.premium)} · ${distance.label}</small>`;
 };
 
 const earningsCell = (earnings) => {
@@ -169,10 +204,10 @@ const earningsCell = (earnings) => {
 };
 
 const rowOption = (option, stockPrice) => {
-  const downside = Math.max(((stockPrice - option.strike) / stockPrice) * 100, 0).toFixed(2);
+  const distance = strikeDistance(stockPrice, option.strike);
   return `<div class="put-line">
     <span class="option-main"><b>${money(option.premium)}</b><em>/</em>${money(option.strike)}</span>
-    <span class="option-underlying ${downsideClass(stockPrice, option.strike)}">Spot ${money(stockPrice)} · ${downside}% below</span>
+    <span class="option-underlying ${downsideClass(stockPrice, option.strike)}">Spot ${money(stockPrice)} · ${distance.label}</span>
     <span class="option-stats">V ${Number(option.volume || 0).toLocaleString()} · OI ${Number(option.openInterest || 0).toLocaleString()} · IV ${signedPercent(Number(option.impliedVolatility || 0) * 100)} · R ${Number(option.ratio || 0).toFixed(2)}%</span>
   </div>`;
 };
@@ -217,7 +252,7 @@ const marketLoserRowTemplate = (stock) => {
   return `<tr>
     <td class="stock-cell"><strong>${safeSymbol}</strong><span title="${escapeHtml(stock.name)}">${escapeHtml(stock.name)}</span><div class="stock-earnings"><b>Earnings</b>${earningsCell(stock.nextEarnings)}</div></td>
     <td class="price-cell"><span class="negative">${money(stock.price)}</span><small class="negative">${signedMoney(stock.priceChange)} / ${signedPercent(stock.change)}</small></td>
-    <td class="market-cap-cell"><span>${marketCap(stock.marketCap)}</span><small>Minimum $10B</small></td>
+    <td class="market-cap-cell"><span>${marketCap(stock.marketCap)}</span><small>Minimum $${minimumMarketCapBillions}B</small></td>
     <td class="option-cell">${rowOptions(nextOptions.puts, stock.price)}</td>
     <td class="juice-cell">${juiceCell(stock, 'nextFriday')}</td>
     <td class="option-cell">${rowOptions(followingOptions.puts, stock.price)}</td>
@@ -234,9 +269,9 @@ function renderLoading(symbol) {
   </tr>`);
 }
 
-function compareByJuice(left, right) {
-  const leftJuice = optionJuice(left, juiceSortExpiration);
-  const rightJuice = optionJuice(right, juiceSortExpiration);
+function compareByJuice(left, right, expirationKey) {
+  const leftJuice = optionJuice(left, expirationKey);
+  const rightJuice = optionJuice(right, expirationKey);
   if (leftJuice == null && rightJuice == null) return 0;
   if (leftJuice == null) return 1;
   if (rightJuice == null) return -1;
@@ -244,7 +279,10 @@ function compareByJuice(left, right) {
 }
 
 function renderResults(results) {
-  const stocks = results.filter((result) => result.data).map((result) => result.data).sort(compareByJuice);
+  const stocks = results
+    .filter((result) => result.data)
+    .map((result) => result.data)
+    .sort((left, right) => compareByJuice(left, right, watchlistJuiceSortExpiration));
   const errors = results.filter((result) => result.error);
 
   list.innerHTML = [
@@ -254,26 +292,66 @@ function renderResults(results) {
 }
 
 function renderMarketLosers(stocks, error = '') {
+  const expirationLabel = marketJuiceSortExpiration === 'followingFriday' ? 'second' : 'first';
+  marketLosersEmptyMessage.textContent = `No stocks with a market cap of at least $${minimumMarketCapBillions}B are currently down more than ${minimumDropPercent}% with a ${expirationLabel}-expiration option return above ${minimumOptionReturnPercent.toFixed(2)}%.`;
   if (error) {
-    marketLosersList.innerHTML = `<tr class="error-row"><td colspan="9">Large-cap decline scan: ${escapeHtml(error)}. Try refreshing.</td></tr>`;
+    latestMarketLosers = [];
+    marketLosersList.innerHTML = `<tr class="error-row"><td colspan="9">Daily-drop scan: ${escapeHtml(error)}. Try refreshing.</td></tr>`;
     marketLosersEmpty.hidden = true;
     marketLosersCount.textContent = 'Scan unavailable';
     return;
   }
 
-  const rankedStocks = [...stocks]
-    .sort((left, right) => Number(left.change) - Number(right.change))
+  latestMarketLosers = [...stocks];
+  const rankedStocks = stocks
+    .filter((stock) => {
+      const option = stock.options?.[marketJuiceSortExpiration]?.puts?.middle;
+      return option && Number(option.ratio) > minimumOptionReturnPercent;
+    })
+    .sort((left, right) => compareByJuice(left, right, marketJuiceSortExpiration))
     .slice(0, 10);
   marketLosersList.innerHTML = rankedStocks.map(marketLoserRowTemplate).join('');
   marketLosersEmpty.hidden = rankedStocks.length > 0;
   marketLosersCount.textContent = `${rankedStocks.length} ${rankedStocks.length === 1 ? 'match' : 'matches'} today`;
 }
 
+async function loadMarketLosers() {
+  const sequence = ++marketLosersRequestSequence;
+  marketLosersList.innerHTML = `<tr class="loading">
+    <td class="stock-cell"><strong>TOP 10</strong><span>Scanning daily declines...</span></td>
+    <td colspan="8"><div class="loading-bar"></div></td>
+  </tr>`;
+  marketLosersEmpty.hidden = true;
+  marketLosersCount.textContent = 'Scanning market...';
+  marketLosersShell.setAttribute('aria-busy', 'true');
+
+  const query = new URLSearchParams({
+    target: String(targetPercent),
+    marketCapBillions: String(minimumMarketCapBillions),
+    dropPercent: String(minimumDropPercent),
+    rankExpiration: marketJuiceSortExpiration,
+  });
+
+  try {
+    const response = await fetch(`/api/market-losers?${query}`, { cache: 'no-store' });
+    const data = await response.json();
+    if (!response.ok || data.error) throw new Error(data.error || 'Market feed returned no data');
+    if (sequence !== marketLosersRequestSequence) return;
+    renderMarketLosers(Array.isArray(data.stocks) ? data.stocks : []);
+  } catch (error) {
+    if (sequence !== marketLosersRequestSequence) return;
+    renderMarketLosers([], error.message);
+  } finally {
+    if (sequence === marketLosersRequestSequence) {
+      marketLosersShell.setAttribute('aria-busy', 'false');
+    }
+  }
+}
+
 function setLoading(isLoading) {
   refreshButton.classList.toggle('is-loading', isLoading);
   refreshButton.disabled = isLoading;
   document.querySelector('.table-shell').setAttribute('aria-busy', String(isLoading));
-  marketLosersShell.setAttribute('aria-busy', String(isLoading));
 }
 
 function updateCounts() {
@@ -284,12 +362,6 @@ async function loadAll() {
   const sequence = ++requestSequence;
   latestResults = [];
   list.innerHTML = '';
-  marketLosersList.innerHTML = `<tr class="loading">
-    <td class="stock-cell"><strong>TOP 10</strong><span>Scanning large-cap declines...</span></td>
-    <td colspan="8"><div class="loading-bar"></div></td>
-  </tr>`;
-  marketLosersEmpty.hidden = true;
-  marketLosersCount.textContent = 'Scanning market...';
   emptyState.hidden = symbols.length > 0;
   updateCounts();
 
@@ -307,20 +379,13 @@ async function loadAll() {
     }
   }));
 
-  const marketLosersRequest = fetch(`/api/market-losers?target=${targetPercent}`)
-    .then(async (response) => {
-      const data = await response.json();
-      if (!response.ok || data.error) throw new Error(data.error || 'Market feed returned no data');
-      return { stocks: Array.isArray(data.stocks) ? data.stocks : [] };
-    })
-    .catch((error) => ({ stocks: [], error: error.message }));
+  const marketLosersRequest = loadMarketLosers();
 
-  const [results, loserResults] = await Promise.all([watchlistRequest, marketLosersRequest]);
+  const [results] = await Promise.all([watchlistRequest, marketLosersRequest]);
 
   if (sequence !== requestSequence) return;
   latestResults = results;
   renderResults(results);
-  renderMarketLosers(loserResults.stocks, loserResults.error);
   const refreshedAt = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   lastRefresh.textContent = refreshedAt;
   setLoading(false);
@@ -354,10 +419,28 @@ targetSelect.addEventListener('change', () => {
   loadAll();
 });
 
+marketCapSelect.addEventListener('change', () => {
+  minimumMarketCapBillions = Number(marketCapSelect.value);
+  localStorage.setItem(marketCapStorageKey, String(minimumMarketCapBillions));
+  loadMarketLosers();
+});
+
+dropPercentSelect.addEventListener('change', () => {
+  minimumDropPercent = Number(dropPercentSelect.value);
+  localStorage.setItem(dropPercentStorageKey, String(minimumDropPercent));
+  loadMarketLosers();
+});
+
 juiceSortSelect.addEventListener('change', () => {
-  juiceSortExpiration = juiceSortSelect.value;
-  localStorage.setItem(juiceSortStorageKey, juiceSortExpiration);
+  watchlistJuiceSortExpiration = juiceSortSelect.value;
+  localStorage.setItem(juiceSortStorageKey, watchlistJuiceSortExpiration);
   if (latestResults.length) renderResults(latestResults);
+});
+
+marketJuiceSortSelect.addEventListener('change', () => {
+  marketJuiceSortExpiration = marketJuiceSortSelect.value;
+  localStorage.setItem(marketJuiceSortStorageKey, marketJuiceSortExpiration);
+  loadMarketLosers();
 });
 
 loadAll();
