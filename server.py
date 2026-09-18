@@ -35,7 +35,7 @@ NASDAQ_EARNINGS_LOCK = threading.Lock()
 YAHOO_EARNINGS_CACHE = {}
 YAHOO_EARNINGS_LOCK = threading.Lock()
 MARKET_LOSERS_CACHE_TTL_SECONDS = 5 * 60
-MARKET_LOSERS_CACHE = {"expires_at": 0, "candidates": []}
+MARKET_LOSERS_CACHE = {"expires_at": 0, "quotes": []}
 MARKET_LOSERS_LOCK = threading.Lock()
 
 
@@ -266,54 +266,51 @@ def cboe_json(symbol):
         return json.loads(response.read().decode("utf-8"))
 
 
-def market_loser_candidates(limit=10):
-    """Return today's steepest US-listed equity decliners above $10B."""
+def market_loser_candidates(minimum_market_cap, drop_percent, limit=10):
+    """Return today's steepest equity decliners matching configurable filters."""
     now = time.time()
-    if MARKET_LOSERS_CACHE["expires_at"] > now:
-        return MARKET_LOSERS_CACHE["candidates"][:limit]
-
-    with MARKET_LOSERS_LOCK:
-        now = time.time()
-        if MARKET_LOSERS_CACHE["expires_at"] > now:
-            return MARKET_LOSERS_CACHE["candidates"][:limit]
-
-        query = urllib.parse.urlencode({
-            "formatted": "false",
-            "scrIds": "day_losers",
-            "count": 250,
-            "start": 0,
-        })
-        payload = yahoo_json(
-            "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?" + query
-        )
-        results = payload.get("finance", {}).get("result") or []
-        quotes = results[0].get("quotes", []) if results else []
-        candidates = []
-        for quote in quotes:
-            symbol = (quote.get("symbol") or "").upper().strip()
-            market_cap = quote.get("marketCap") or 0
-            change = quote.get("regularMarketChangePercent")
-            if (
-                symbol
-                and quote.get("quoteType") == "EQUITY"
-                and market_cap >= 10_000_000_000
-                and change is not None
-                and change < -10
-            ):
-                candidates.append({
-                    "symbol": symbol,
-                    "marketCap": market_cap,
-                    "change": change,
-                    "price": quote.get("regularMarketPrice"),
-                    "priceChange": quote.get("regularMarketChange"),
+    if MARKET_LOSERS_CACHE["expires_at"] <= now:
+        with MARKET_LOSERS_LOCK:
+            now = time.time()
+            if MARKET_LOSERS_CACHE["expires_at"] <= now:
+                query = urllib.parse.urlencode({
+                    "formatted": "false",
+                    "scrIds": "day_losers",
+                    "count": 250,
+                    "start": 0,
+                })
+                payload = yahoo_json(
+                    "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?" + query
+                )
+                results = payload.get("finance", {}).get("result") or []
+                quotes = results[0].get("quotes", []) if results else []
+                MARKET_LOSERS_CACHE.update({
+                    "expires_at": now + MARKET_LOSERS_CACHE_TTL_SECONDS,
+                    "quotes": quotes,
                 })
 
-        candidates.sort(key=lambda item: item["change"])
-        MARKET_LOSERS_CACHE.update({
-            "expires_at": now + MARKET_LOSERS_CACHE_TTL_SECONDS,
-            "candidates": candidates,
-        })
-        return candidates[:limit]
+    candidates = []
+    for quote in MARKET_LOSERS_CACHE["quotes"]:
+        symbol = (quote.get("symbol") or "").upper().strip()
+        market_cap = quote.get("marketCap") or 0
+        change = quote.get("regularMarketChangePercent")
+        if (
+            symbol
+            and quote.get("quoteType") == "EQUITY"
+            and market_cap >= minimum_market_cap
+            and change is not None
+            and change < -drop_percent
+        ):
+            candidates.append({
+                "symbol": symbol,
+                "marketCap": market_cap,
+                "change": change,
+                "price": quote.get("regularMarketPrice"),
+                "priceChange": quote.get("regularMarketChange"),
+            })
+
+    candidates.sort(key=lambda item: item["change"])
+    return candidates[:limit]
 
 
 def closest_option(options, target_ratio):
@@ -519,9 +516,18 @@ def fetch_stock(symbol, target_percent=1.0):
     }
 
 
-def fetch_market_losers(target_percent=1.0, limit=10):
+def fetch_market_losers(
+    target_percent=1.0,
+    minimum_market_cap=10_000_000_000,
+    drop_percent=10,
+    limit=10,
+):
     """Enrich up to ten qualifying daily losers with the standard stock view."""
-    candidates = market_loser_candidates(min(limit, 10))
+    candidates = market_loser_candidates(
+        minimum_market_cap,
+        drop_percent,
+        min(limit, 10),
+    )
     if not candidates:
         return []
 
@@ -559,13 +565,27 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == "/api/market-losers":
-            target = urllib.parse.parse_qs(parsed.query).get("target", ["1.0"])[0]
+            query = urllib.parse.parse_qs(parsed.query)
+            target = query.get("target", ["1.0"])[0]
+            market_cap_billions = query.get("marketCapBillions", ["10"])[0]
+            drop_percent = query.get("dropPercent", ["10"])[0]
             try:
+                target = float(target)
+                market_cap_billions = float(market_cap_billions)
+                drop_percent = float(drop_percent)
+                if market_cap_billions <= 0 or drop_percent <= 0:
+                    raise ValueError("Market cap and drop percentage must be greater than zero")
+                minimum_market_cap = int(market_cap_billions * 1_000_000_000)
                 payload = {
-                    "stocks": fetch_market_losers(float(target), 10),
+                    "stocks": fetch_market_losers(
+                        target,
+                        minimum_market_cap,
+                        drop_percent,
+                        10,
+                    ),
                     "criteria": {
-                        "maximumChangePercent": -10,
-                        "minimumMarketCap": 10_000_000_000,
+                        "changePercentBelow": -drop_percent,
+                        "minimumMarketCap": minimum_market_cap,
                         "limit": 10,
                     },
                 }
