@@ -774,6 +774,8 @@ def fetch_market_losers(
             # so every displayed row continues to match the advertised filter.
             stock["marketCap"] = candidate["marketCap"]
             stock["change"] = candidate["change"]
+            stock["sector"] = candidate.get("sector")
+            stock["industry"] = candidate.get("industry")
             if candidate["price"] is not None:
                 stock["price"] = candidate["price"]
             if candidate["priceChange"] is not None:
