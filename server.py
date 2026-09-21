@@ -34,14 +34,17 @@ NASDAQ_EARNINGS_CACHE = {"expires_at": 0, "by_symbol": {}}
 NASDAQ_EARNINGS_LOCK = threading.Lock()
 YAHOO_EARNINGS_CACHE = {}
 YAHOO_EARNINGS_LOCK = threading.Lock()
+YAHOO_EARNINGS_CACHE_MAX_ENTRIES = 512
 MARKET_LOSERS_CACHE_TTL_SECONDS = 5 * 60
 MARKET_LOSERS_CACHE = {"expires_at": 0, "quotes": []}
 MARKET_LOSERS_LOCK = threading.Lock()
-CBOE_CACHE_TTL_SECONDS = 2 * 60
-CBOE_CACHE = {}
-CBOE_CACHE_LOCK = threading.Lock()
-CBOE_SYMBOL_LOCKS = {}
-CBOE_FETCH_SEMAPHORE = threading.BoundedSemaphore(4)
+OPTION_ROWS_CACHE_TTL_SECONDS = 2 * 60
+OPTION_ROWS_CACHE_MAX_ENTRIES = 64
+OPTION_ROWS_CACHE = {}
+OPTION_ROWS_CACHE_LOCK = threading.Lock()
+CBOE_SYMBOL_LOCKS = tuple(threading.Lock() for _ in range(16))
+CBOE_FETCH_SEMAPHORE = threading.BoundedSemaphore(2)
+MARKET_SCAN_SEMAPHORE = threading.BoundedSemaphore(1)
 
 
 def earnings_calendar():
@@ -236,6 +239,19 @@ def yahoo_earnings(symbol):
         print("Yahoo earnings fallback error for %s: %s" % (symbol, str(error)[:180]))
 
     with YAHOO_EARNINGS_LOCK:
+        expired_symbols = [
+            cached_symbol
+            for cached_symbol, cached in YAHOO_EARNINGS_CACHE.items()
+            if cached["expires_at"] <= now
+        ]
+        for cached_symbol in expired_symbols:
+            YAHOO_EARNINGS_CACHE.pop(cached_symbol, None)
+        while len(YAHOO_EARNINGS_CACHE) >= YAHOO_EARNINGS_CACHE_MAX_ENTRIES:
+            oldest_symbol = min(
+                YAHOO_EARNINGS_CACHE,
+                key=lambda cached_symbol: YAHOO_EARNINGS_CACHE[cached_symbol]["expires_at"],
+            )
+            YAHOO_EARNINGS_CACHE.pop(oldest_symbol, None)
         YAHOO_EARNINGS_CACHE[symbol] = {
             "expires_at": now + (
                 EARNINGS_CACHE_TTL_SECONDS if value else EARNINGS_RETRY_SECONDS
@@ -262,41 +278,6 @@ def yahoo_json(url):
     request = urllib.request.Request(request_url, headers=YAHOO_HEADERS)
     with YAHOO_OPENER.open(request, timeout=15) as response:
         return json.loads(response.read().decode("utf-8"))
-
-
-def cboe_json(symbol):
-    now = time.time()
-    with CBOE_CACHE_LOCK:
-        cached = CBOE_CACHE.get(symbol)
-        if cached and cached["expires_at"] > now:
-            return cached["value"]
-        symbol_lock = CBOE_SYMBOL_LOCKS.setdefault(symbol, threading.Lock())
-
-    with symbol_lock:
-        now = time.time()
-        with CBOE_CACHE_LOCK:
-            cached = CBOE_CACHE.get(symbol)
-            if cached and cached["expires_at"] > now:
-                return cached["value"]
-
-        try:
-            with CBOE_FETCH_SEMAPHORE:
-                value = uncached_cboe_json(symbol)
-        except Exception:
-            # A recently expired response is safer than dropping every option
-            # row when Cboe temporarily rate-limits a refresh.
-            with CBOE_CACHE_LOCK:
-                stale = CBOE_CACHE.get(symbol)
-                if stale:
-                    return stale["value"]
-            raise
-
-        with CBOE_CACHE_LOCK:
-            CBOE_CACHE[symbol] = {
-                "expires_at": now + CBOE_CACHE_TTL_SECONDS,
-                "value": value,
-            }
-        return value
 
 
 def uncached_cboe_json(symbol):
@@ -416,6 +397,131 @@ def qualifying_puts(puts, target_percent):
     }
 
 
+def cached_option_rows(symbol, today):
+    """Return only the two useful put expirations, never the full Cboe chain.
+
+    A full chain can be several megabytes once decoded into Python objects. The
+    old cache retained that entire object graph for every scanned ticker. This
+    cache stores a bounded set of compact rows instead.
+    """
+    cache_key = (symbol, today.isoformat())
+    now = time.time()
+    stale_value = None
+    with OPTION_ROWS_CACHE_LOCK:
+        cached = OPTION_ROWS_CACHE.get(cache_key)
+        if cached:
+            stale_value = cached["value"]
+            if cached["expires_at"] > now:
+                return stale_value
+
+    symbol_lock = CBOE_SYMBOL_LOCKS[hash(symbol) % len(CBOE_SYMBOL_LOCKS)]
+    with symbol_lock:
+        now = time.time()
+        with OPTION_ROWS_CACHE_LOCK:
+            cached = OPTION_ROWS_CACHE.get(cache_key)
+            if cached:
+                stale_value = cached["value"]
+                if cached["expires_at"] > now:
+                    return stale_value
+
+        try:
+            with CBOE_FETCH_SEMAPHORE:
+                cboe_rows = uncached_cboe_json(symbol)["data"]["options"]
+
+            expiration_dates = set()
+            for row in cboe_rows:
+                contract = row.get("option", "")
+                suffix = contract[len(symbol):]
+                if len(suffix) != 15 or suffix[6] != "P":
+                    continue
+                try:
+                    expiration_date = datetime.strptime(suffix[:6], "%y%m%d").date()
+                except (TypeError, ValueError):
+                    continue
+                if expiration_date >= today:
+                    expiration_dates.add(expiration_date)
+
+            expiration_dates = sorted(expiration_dates)
+            days_to_friday = (4 - today.weekday()) % 7 or 7
+            targets = (
+                ("nextFriday", today + timedelta(days=days_to_friday)),
+                ("followingFriday", today + timedelta(days=days_to_friday + 7)),
+            )
+            selected_dates = {}
+            for key, target in targets:
+                expiration = (
+                    min(expiration_dates, key=lambda value: abs(value - target))
+                    if expiration_dates else None
+                )
+                selected_dates[key] = expiration
+
+            rows_by_expiration = {
+                expiration: [] for expiration in set(selected_dates.values()) if expiration
+            }
+            for row in cboe_rows:
+                contract = row.get("option", "")
+                suffix = contract[len(symbol):]
+                if len(suffix) != 15 or suffix[6] != "P":
+                    continue
+                try:
+                    expiration_date = datetime.strptime(suffix[:6], "%y%m%d").date()
+                    strike = int(suffix[7:]) / 1000
+                except (TypeError, ValueError):
+                    continue
+                if expiration_date not in rows_by_expiration:
+                    continue
+                rows_by_expiration[expiration_date].append({
+                    "bid": row.get("bid", 0) or 0,
+                    "last_trade_price": row.get("last_trade_price", 0) or 0,
+                    "percent_change": row.get("percent_change", 0) or 0,
+                    "volume": row.get("volume", 0) or 0,
+                    "open_interest": row.get("open_interest", 0) or 0,
+                    "iv": row.get("iv", 0) or 0,
+                    "strike": strike,
+                })
+
+            value = {}
+            for key, expiration in selected_dates.items():
+                value[key] = {
+                    "rows": rows_by_expiration.get(expiration, []),
+                    "date": f"{expiration:%b} {expiration.day}" if expiration else None,
+                }
+        except Exception:
+            if stale_value is not None:
+                return stale_value
+            raise
+
+        with OPTION_ROWS_CACHE_LOCK:
+            expired_keys = [
+                key for key, entry in OPTION_ROWS_CACHE.items()
+                if entry["expires_at"] <= now and key != cache_key
+            ]
+            for key in expired_keys:
+                OPTION_ROWS_CACHE.pop(key, None)
+            while len(OPTION_ROWS_CACHE) >= OPTION_ROWS_CACHE_MAX_ENTRIES:
+                oldest_key = min(
+                    OPTION_ROWS_CACHE,
+                    key=lambda key: OPTION_ROWS_CACHE[key]["expires_at"],
+                )
+                OPTION_ROWS_CACHE.pop(oldest_key, None)
+            OPTION_ROWS_CACHE[cache_key] = {
+                "expires_at": now + OPTION_ROWS_CACHE_TTL_SECONDS,
+                "value": value,
+            }
+        return value
+
+
+def option_signals(symbol, target_percent, today):
+    cached_rows = cached_option_rows(symbol, today)
+    return {
+        key: {
+            "puts": qualifying_puts(expiration["rows"], target_percent),
+            "date": expiration["date"],
+        }
+        for key, expiration in cached_rows.items()
+    }
+
+
 def previous_trading_close(meta, timestamps, closes, current_price):
     """Return the close immediately before the regular-market price session.
 
@@ -483,37 +589,14 @@ def fetch_stock(symbol, target_percent=1.0):
         return sum(values) / len(values) if values else None
 
     today = datetime.now().date()
-    options = {}
+    options = {
+        "nextFriday": {"puts": {"middle": None}, "date": None},
+        "followingFriday": {"puts": {"middle": None}, "date": None},
+    }
     try:
-        cboe_rows = cboe_json(symbol)["data"]["options"]
-        parsed_rows = []
-        for row in cboe_rows:
-            contract = row.get("option", "")
-            suffix = contract[len(symbol):]
-            if len(suffix) != 15 or suffix[6] not in ("C", "P"):
-                continue
-            expiration_date = datetime.strptime(suffix[:6], "%y%m%d").date()
-            row["expiration_date"] = expiration_date
-            row["type"] = suffix[6]
-            row["strike"] = int(suffix[7:]) / 1000
-            row["percentChange"] = row.get("percent_change", 0) or 0
-            parsed_rows.append(row)
+        options = option_signals(symbol, target_percent, today)
     except Exception:
-        parsed_rows = []
-
-    days_to_friday = (4 - today.weekday()) % 7 or 7
-    target_expirations = (
-        ("nextFriday", today + timedelta(days=days_to_friday)),
-        ("followingFriday", today + timedelta(days=days_to_friday + 7)),
-    )
-    expiration_dates = sorted({row["expiration_date"] for row in parsed_rows if row["expiration_date"] >= today})
-    for key, target in target_expirations:
-        expiration = min(expiration_dates, key=lambda value: abs(value - target)) if expiration_dates else None
-        puts = [row for row in parsed_rows if row["expiration_date"] == expiration and row["type"] == "P"]
-        options[key] = {
-            "puts": qualifying_puts(puts, target_percent),
-            "date": f"{expiration:%b} {expiration.day}" if expiration else None,
-        }
+        pass
 
     calendar = earnings_calendar()
     next_earnings = calendar.get(symbol)
@@ -575,7 +658,7 @@ def fetch_market_losers(
         return []
 
     stocks = []
-    worker_count = min(8, len(candidates))
+    worker_count = min(4, len(candidates))
     with ThreadPoolExecutor(max_workers=worker_count) as executor:
         futures = {
             executor.submit(fetch_stock, candidate["symbol"], target_percent): candidate
@@ -632,6 +715,30 @@ def fetch_market_losers(
     return qualifying_stocks[:min(limit, 10)]
 
 
+class BoundedThreadingHTTPServer(ThreadingHTTPServer):
+    """Prevent a traffic spike from creating an unbounded number of threads."""
+    daemon_threads = True
+    request_queue_size = 32
+
+    def __init__(self, server_address, handler_class, maximum_threads=16):
+        super().__init__(server_address, handler_class)
+        self.request_slots = threading.BoundedSemaphore(maximum_threads)
+
+    def process_request(self, request, client_address):
+        self.request_slots.acquire()
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self.request_slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.request_slots.release()
+
+
 class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
@@ -642,6 +749,8 @@ class Handler(SimpleHTTPRequestHandler):
             drop_percent = query.get("dropPercent", ["10"])[0]
             rank_expiration = query.get("rankExpiration", ["nextFriday"])[0]
             minimum_return_percent = query.get("minimumReturnPercent", ["0.8"])[0]
+            scan_acquired = False
+            status = 200
             try:
                 target = float(target)
                 market_cap_billions = float(market_cap_billions)
@@ -651,6 +760,9 @@ class Handler(SimpleHTTPRequestHandler):
                     raise ValueError("Rank expiration must be nextFriday or followingFriday")
                 if market_cap_billions <= 0 or drop_percent <= 0 or minimum_return_percent < 0:
                     raise ValueError("Market cap and filter percentages must be valid")
+                scan_acquired = MARKET_SCAN_SEMAPHORE.acquire(timeout=5)
+                if not scan_acquired:
+                    raise TimeoutError("The market scanner is busy; please try again shortly.")
                 minimum_market_cap = int(market_cap_billions * 1_000_000_000)
                 payload = {
                     "stocks": fetch_market_losers(
@@ -670,10 +782,19 @@ class Handler(SimpleHTTPRequestHandler):
                     },
                 }
                 body = json.dumps(payload).encode("utf-8")
-                self.send_response(200)
-            except Exception as error:
+            except TimeoutError as error:
+                status = 503
                 body = json.dumps({"error": str(error)}).encode("utf-8")
-                self.send_response(502)
+            except ValueError as error:
+                status = 400
+                body = json.dumps({"error": str(error)}).encode("utf-8")
+            except Exception as error:
+                status = 502
+                body = json.dumps({"error": str(error)}).encode("utf-8")
+            finally:
+                if scan_acquired:
+                    MARKET_SCAN_SEMAPHORE.release()
+            self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
@@ -704,4 +825,4 @@ if __name__ == "__main__":
     os.chdir(ROOT)
     port = int(os.environ.get("PORT", "8765"))
     print("Stockoption running on port %d" % port)
-    ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
+    BoundedThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
