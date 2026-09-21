@@ -819,7 +819,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def log_message(self, format, *args):
         return
-
+ 
 
 if __name__ == "__main__":
     os.chdir(ROOT)
