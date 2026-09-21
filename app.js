@@ -43,6 +43,7 @@ const input = document.querySelector('#symbol-input');
 const refreshButton = document.querySelector('#refresh');
 const lastRefresh = document.querySelector('#last-refresh');
 const targetSelect = document.querySelector('#target-select');
+const marketTargetSelect = document.querySelector('#market-target-select');
 const juiceSortSelect = document.querySelector('#juice-sort-select');
 const marketJuiceSortSelect = document.querySelector('#market-juice-sort-select');
 const marketLosersList = document.querySelector('#market-losers');
@@ -55,12 +56,13 @@ const dropPercentSelect = document.querySelector('#drop-percent-select');
 
 const storageKey = 'stockoption-watchlist';
 const targetStorageKey = 'stockoption-target-percent';
+const marketTargetStorageKey = 'stockoption-market-target-percent';
 const juiceSortStorageKey = 'stockoption-juice-sort-expiration';
 const marketJuiceSortStorageKey = 'stockoption-market-juice-sort-expiration';
 const marketCapStorageKey = 'stockoption-minimum-market-cap-billions';
 const dropPercentStorageKey = 'stockoption-minimum-drop-percent';
 const minimumOptionReturnPercent = 0.80;
-const defaultSymbols = ['OKLO', 'IREN', 'ASTS', 'INTC', 'CBRS', 'BE', 'NVDA', 'ALAB', 'TSLA', 'AAOI', 'CRDO', 'NBIS', 'MRVL', 'LUNR'];
+const defaultSymbols = ['ASTS', 'INTC', 'NVDA', 'ALAB', 'TSLA', 'AAOI', 'NBIS'];
 
 function storedSymbols() {
   try {
@@ -72,7 +74,8 @@ function storedSymbols() {
 }
 
 let symbols = storedSymbols();
-let targetPercent = Number(localStorage.getItem(targetStorageKey) || '1.00');
+let watchlistTargetPercent = Number(localStorage.getItem(targetStorageKey) || '1.00');
+let marketTargetPercent = Number(localStorage.getItem(marketTargetStorageKey) || '1.00');
 let minimumMarketCapBillions = Number(localStorage.getItem(marketCapStorageKey) || '10');
 let minimumDropPercent = Number(localStorage.getItem(dropPercentStorageKey) || '10');
 let watchlistJuiceSortExpiration = localStorage.getItem(juiceSortStorageKey) === 'followingFriday'
@@ -100,9 +103,11 @@ document.querySelector('#losers-following-friday-date').textContent = formatFrid
 for (let value = 0.1; value <= 5; value += 0.1) {
   const percent = value.toFixed(2);
   targetSelect.insertAdjacentHTML('beforeend', `<option value="${percent}">${percent}%</option>`);
+  marketTargetSelect.insertAdjacentHTML('beforeend', `<option value="${percent}">${percent}%</option>`);
 }
 
-targetSelect.value = targetPercent.toFixed(2);
+targetSelect.value = watchlistTargetPercent.toFixed(2);
+marketTargetSelect.value = marketTargetPercent.toFixed(2);
 juiceSortSelect.value = watchlistJuiceSortExpiration;
 marketJuiceSortSelect.value = marketJuiceSortExpiration;
 marketCapSelect.value = String(minimumMarketCapBillions);
@@ -248,9 +253,12 @@ const marketLoserRowTemplate = (stock) => {
   const nextOptions = stock.options?.nextFriday || {};
   const followingOptions = stock.options?.followingFriday || {};
   const safeSymbol = escapeHtml(stock.symbol);
+  const industry = stock.industry
+    ? `<div class="stock-industry"><b>Industry</b><span title="${escapeHtml(stock.industry)}">${escapeHtml(stock.industry)}</span></div>`
+    : '';
 
   return `<tr>
-    <td class="stock-cell"><strong>${safeSymbol}</strong><span title="${escapeHtml(stock.name)}">${escapeHtml(stock.name)}</span><div class="stock-earnings"><b>Earnings</b>${earningsCell(stock.nextEarnings)}</div></td>
+    <td class="stock-cell"><strong>${safeSymbol}</strong><span title="${escapeHtml(stock.name)}">${escapeHtml(stock.name)}</span>${industry}<div class="stock-earnings"><b>Earnings</b>${earningsCell(stock.nextEarnings)}</div></td>
     <td class="price-cell"><span class="negative">${money(stock.price)}</span><small class="negative">${signedMoney(stock.priceChange)} / ${signedPercent(stock.change)}</small></td>
     <td class="market-cap-cell"><span>${marketCap(stock.marketCap)}</span><small>Minimum $${minimumMarketCapBillions}B</small></td>
     <td class="option-cell">${rowOptions(nextOptions.puts, stock.price)}</td>
@@ -326,7 +334,7 @@ async function loadMarketLosers() {
   marketLosersShell.setAttribute('aria-busy', 'true');
 
   const query = new URLSearchParams({
-    target: String(targetPercent),
+    target: String(marketTargetPercent),
     marketCapBillions: String(minimumMarketCapBillions),
     dropPercent: String(minimumDropPercent),
     rankExpiration: marketJuiceSortExpiration,
@@ -359,7 +367,7 @@ function updateCounts() {
   count.textContent = `${symbols.length} ${symbols.length === 1 ? 'stock' : 'stocks'}`;
 }
 
-async function loadAll() {
+async function loadWatchlist() {
   const sequence = ++requestSequence;
   latestResults = [];
   list.innerHTML = '';
@@ -371,7 +379,7 @@ async function loadAll() {
 
   const watchlistRequest = Promise.all(symbols.map(async (symbol) => {
     try {
-      const response = await fetch(`/api/stock?symbol=${encodeURIComponent(symbol)}&target=${targetPercent}`);
+      const response = await fetch(`/api/stock?symbol=${encodeURIComponent(symbol)}&target=${watchlistTargetPercent}`);
       const data = await response.json();
       if (!response.ok || data.error) throw new Error(data.error || 'Market feed returned no data');
       return { symbol, data };
@@ -380,9 +388,7 @@ async function loadAll() {
     }
   }));
 
-  const marketLosersRequest = loadMarketLosers();
-
-  const [results] = await Promise.all([watchlistRequest, marketLosersRequest]);
+  const results = await watchlistRequest;
 
   if (sequence !== requestSequence) return;
   latestResults = results;
@@ -390,6 +396,11 @@ async function loadAll() {
   const refreshedAt = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   lastRefresh.textContent = refreshedAt;
   setLoading(false);
+}
+
+function loadAll() {
+  loadWatchlist();
+  loadMarketLosers();
 }
 
 document.querySelector('#add-form').addEventListener('submit', (event) => {
@@ -402,7 +413,7 @@ document.querySelector('#add-form').addEventListener('submit', (event) => {
   symbols.push(symbol);
   localStorage.setItem(storageKey, JSON.stringify(symbols));
   input.value = '';
-  loadAll();
+  loadWatchlist();
 });
 
 list.addEventListener('click', (event) => {
@@ -410,14 +421,20 @@ list.addEventListener('click', (event) => {
   if (!button) return;
   symbols = symbols.filter((symbol) => symbol !== button.dataset.symbol);
   localStorage.setItem(storageKey, JSON.stringify(symbols));
-  loadAll();
+  loadWatchlist();
 });
 
-refreshButton.addEventListener('click', loadAll);
+refreshButton.addEventListener('click', loadWatchlist);
 targetSelect.addEventListener('change', () => {
-  targetPercent = Number(targetSelect.value);
-  localStorage.setItem(targetStorageKey, targetPercent.toFixed(2));
-  loadAll();
+  watchlistTargetPercent = Number(targetSelect.value);
+  localStorage.setItem(targetStorageKey, watchlistTargetPercent.toFixed(2));
+  loadWatchlist();
+});
+
+marketTargetSelect.addEventListener('change', () => {
+  marketTargetPercent = Number(marketTargetSelect.value);
+  localStorage.setItem(marketTargetStorageKey, marketTargetPercent.toFixed(2));
+  loadMarketLosers();
 });
 
 marketCapSelect.addEventListener('change', () => {
