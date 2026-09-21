@@ -38,6 +38,11 @@ YAHOO_EARNINGS_CACHE_MAX_ENTRIES = 512
 MARKET_LOSERS_CACHE_TTL_SECONDS = 5 * 60
 MARKET_LOSERS_CACHE = {"expires_at": 0, "quotes": []}
 MARKET_LOSERS_LOCK = threading.Lock()
+COMPANY_CLASSIFICATION_CACHE_TTL_SECONDS = 6 * 60 * 60
+COMPANY_CLASSIFICATION_RETRY_SECONDS = 5 * 60
+COMPANY_CLASSIFICATION_CACHE_MAX_ENTRIES = 512
+COMPANY_CLASSIFICATION_CACHE = {}
+COMPANY_CLASSIFICATION_LOCK = threading.Lock()
 OPTION_ROWS_CACHE_TTL_SECONDS = 2 * 60
 OPTION_ROWS_CACHE_MAX_ENTRIES = 64
 OPTION_ROWS_CACHE = {}
@@ -324,6 +329,7 @@ def market_loser_candidates(minimum_market_cap, drop_percent, limit=10):
         ):
             candidates.append({
                 "symbol": symbol,
+                "name": quote.get("longName") or quote.get("shortName") or symbol,
                 "marketCap": market_cap,
                 "change": change,
                 "price": quote.get("regularMarketPrice"),
@@ -332,6 +338,73 @@ def market_loser_candidates(minimum_market_cap, drop_percent, limit=10):
 
     candidates.sort(key=lambda item: item["change"])
     return candidates[:limit]
+
+
+def yahoo_company_classification(symbol):
+    """Return Yahoo's sector and industry classification with a bounded cache."""
+    now = time.time()
+    with COMPANY_CLASSIFICATION_LOCK:
+        cached = COMPANY_CLASSIFICATION_CACHE.get(symbol)
+        if cached and cached["expires_at"] > now:
+            return cached["value"]
+
+    value = None
+    try:
+        query = urllib.parse.urlencode({
+            "q": symbol,
+            "quotesCount": 6,
+            "newsCount": 0,
+        })
+        payload = yahoo_json("https://query2.finance.yahoo.com/v1/finance/search?" + query)
+        quote = next(
+            (
+                item for item in payload.get("quotes", [])
+                if (item.get("symbol") or "").upper() == symbol
+                and item.get("quoteType") == "EQUITY"
+            ),
+            None,
+        )
+        if quote:
+            value = {
+                "sector": quote.get("sector") or quote.get("sectorDisp"),
+                "industry": quote.get("industry") or quote.get("industryDisp"),
+            }
+    except Exception as error:
+        print("Company classification error for %s: %s" % (symbol, str(error)[:180]))
+
+    with COMPANY_CLASSIFICATION_LOCK:
+        expired_symbols = [
+            cached_symbol
+            for cached_symbol, cached in COMPANY_CLASSIFICATION_CACHE.items()
+            if cached["expires_at"] <= now
+        ]
+        for cached_symbol in expired_symbols:
+            COMPANY_CLASSIFICATION_CACHE.pop(cached_symbol, None)
+        while len(COMPANY_CLASSIFICATION_CACHE) >= COMPANY_CLASSIFICATION_CACHE_MAX_ENTRIES:
+            oldest_symbol = min(
+                COMPANY_CLASSIFICATION_CACHE,
+                key=lambda cached_symbol: COMPANY_CLASSIFICATION_CACHE[cached_symbol]["expires_at"],
+            )
+            COMPANY_CLASSIFICATION_CACHE.pop(oldest_symbol, None)
+        COMPANY_CLASSIFICATION_CACHE[symbol] = {
+            "expires_at": now + (
+                COMPANY_CLASSIFICATION_CACHE_TTL_SECONDS
+                if value else COMPANY_CLASSIFICATION_RETRY_SECONDS
+            ),
+            "value": value,
+        }
+    return value
+
+
+def is_biotechnology_or_pharmaceutical(classification):
+    if not classification:
+        return False
+    industry = (classification.get("industry") or "").strip().lower()
+    return (
+        industry == "biotechnology"
+        or "pharmaceutical" in industry
+        or industry.startswith("drug manufacturer")
+    )
 
 
 def closest_option(options, target_ratio):
@@ -657,6 +730,29 @@ def fetch_market_losers(
     if not candidates:
         return []
 
+    classified_candidates = []
+    classification_workers = min(6, len(candidates))
+    with ThreadPoolExecutor(max_workers=classification_workers) as executor:
+        futures = {
+            executor.submit(yahoo_company_classification, candidate["symbol"]): candidate
+            for candidate in candidates
+        }
+        for future in as_completed(futures):
+            candidate = futures[future]
+            try:
+                classification = future.result()
+            except Exception:
+                classification = None
+            if is_biotechnology_or_pharmaceutical(classification):
+                continue
+            if classification:
+                candidate.update(classification)
+            classified_candidates.append(candidate)
+
+    candidates = classified_candidates
+    if not candidates:
+        return []
+
     stocks = []
     worker_count = min(4, len(candidates))
     with ThreadPoolExecutor(max_workers=worker_count) as executor:
@@ -819,7 +915,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def log_message(self, format, *args):
         return
- 
+
 
 if __name__ == "__main__":
     os.chdir(ROOT)
