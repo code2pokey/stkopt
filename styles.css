@@ -1188,6 +1188,29 @@ tbody tr:last-child td {
   white-space: nowrap;
 }
 
+.stock-industry {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.stock-industry > b {
+  color: var(--muted-2);
+  font: 500 7px var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.stock-industry > span {
+  overflow: hidden;
+  color: var(--muted);
+  font: 8px var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .stock-earnings {
   display: grid;
   grid-template-columns: auto 1fr;
