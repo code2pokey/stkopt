@@ -239,6 +239,8 @@ a {
 .shell {
   width: min(1560px, calc(100% - clamp(40px, 9vw, 150px)));
   margin: 0 auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .hero {
@@ -766,25 +768,31 @@ a {
 }
 
 .watchlist-section {
-  padding: 64px 0 90px;
-  scroll-margin-top: 28px;
-}
-
-.market-losers-section {
+  order: 2;
   padding: 0 0 90px;
   scroll-margin-top: 28px;
 }
 
+.market-losers-section {
+  order: 1;
+  padding: 64px 0 90px;
+  scroll-margin-top: 28px;
+}
+
+footer {
+  order: 3;
+}
+
 .market-losers-filter-deck {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 40px;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 18px;
   margin-bottom: 24px;
 }
 
 .market-losers-filter-deck > p {
-  max-width: 450px;
+  max-width: 760px;
   margin: 0;
   color: var(--muted);
   font-size: 13px;
@@ -792,6 +800,9 @@ a {
 }
 
 .market-losers-filters {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   flex-shrink: 0;
 }
 
@@ -1621,8 +1632,8 @@ footer strong {
   .overview { grid-template-columns: 1fr 1fr; }
   .overview-card { min-height: 119px; padding: 22px 18px; }
   .overview-card strong { font-size: 22px; }
-  .watchlist-section { padding: 90px 0 70px; }
-  .market-losers-section { padding-bottom: 70px; }
+  .watchlist-section { padding: 0 0 70px; }
+  .market-losers-section { padding: 64px 0 70px; }
   .market-losers-filter-deck { align-items: stretch; flex-direction: column; gap: 18px; }
   .market-losers-filter-deck > p { font-size: 12px; }
   .market-losers-filters { display: grid; grid-template-columns: 1fr 1fr; }
