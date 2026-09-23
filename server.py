@@ -522,11 +522,10 @@ def cached_option_rows(symbol, today):
             )
             selected_dates = {}
             for key, target in targets:
-                expiration = (
-                    min(expiration_dates, key=lambda value: abs(value - target))
-                    if expiration_dates else None
-                )
-                selected_dates[key] = expiration
+                # A contract belongs in a column only when its expiration is
+                # exactly the date printed in that column. Do not substitute a
+                # later monthly expiration for a missing weekly expiration.
+                selected_dates[key] = target if target in expiration_dates else None
 
             rows_by_expiration = {
                 expiration: [] for expiration in set(selected_dates.values()) if expiration
