@@ -158,9 +158,7 @@ const movingDistance = (referenceValue, average) => {
 
 const movingClass = (strike, average) => {
   if (!strike || !average) return '';
-  if (strike > average) return 'positive';
-  if (strike < average) return 'negative';
-  return '';
+  return strike >= average ? 'positive' : 'negative';
 };
 
 const downsideClass = (stockPrice, strike) => Number(strike) <= Number(stockPrice) ? '' : 'negative';
@@ -228,12 +226,14 @@ const rowOptions = (puts, stockPrice) => puts?.middle
 
 const metricGroupCell = (stock, periods, expirationKey) => {
   const strike = stock.options?.[expirationKey]?.puts?.middle?.strike;
-  const strikeLabel = strike ? `Selected strike ${money(strike)}` : 'No qualifying strike for the selected expiration';
-  return `<td class="metric-cell metric-group-cell" title="${escapeHtml(strikeLabel)}">
+  const comparisonLabel = strike
+    ? `Color uses selected strike ${money(strike)}; distance uses current price ${money(stock.price)}`
+    : 'No qualifying strike for the selected expiration; distance uses current price';
+  return `<td class="metric-cell metric-group-cell" title="${escapeHtml(comparisonLabel)}">
     <div class="metric-group">
       ${periods.map((period) => {
         const average = stock[`moving${period}`];
-        return `<div class="metric-line"><b>MA ${period}</b><span class="${movingClass(strike, average)}">${money(average)}</span><small>${movingDistance(strike, average)}</small></div>`;
+        return `<div class="metric-line"><b>MA ${period}</b><span class="${movingClass(strike, average)}">${money(average)}</span><small>${movingDistance(stock.price, average)}</small></div>`;
       }).join('')}
     </div>
   </td>`;
