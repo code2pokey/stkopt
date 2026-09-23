@@ -151,12 +151,17 @@ const signedMoney = (value) => {
   return `${number >= 0 ? '+' : '-'}$${Math.abs(number).toFixed(2)}`;
 };
 
-const movingDistance = (price, average) => {
-  if (!price || !average) return '—';
-  return `${money(Math.abs(price - average))} / ${signedPercent(((price - average) / average) * 100)}`;
+const movingDistance = (referenceValue, average) => {
+  if (!referenceValue || !average) return '—';
+  return `${money(Math.abs(referenceValue - average))} / ${signedPercent(((referenceValue - average) / average) * 100)}`;
 };
 
-const movingClass = (price, average) => !price || !average ? '' : price >= average ? 'positive' : 'negative';
+const movingClass = (strike, average) => {
+  if (!strike || !average) return '';
+  if (strike > average) return 'positive';
+  if (strike < average) return 'negative';
+  return '';
+};
 
 const downsideClass = (stockPrice, strike) => Number(strike) <= Number(stockPrice) ? '' : 'negative';
 
@@ -221,14 +226,18 @@ const rowOptions = (puts, stockPrice) => puts?.middle
   ? rowOption(puts.middle, stockPrice)
   : '<span class="option-empty">No qualifying put</span>';
 
-const metricGroupCell = (stock, periods) => `<td class="metric-cell metric-group-cell">
-  <div class="metric-group">
-    ${periods.map((period) => {
-      const average = stock[`moving${period}`];
-      return `<div class="metric-line"><b>MA ${period}</b><span class="${movingClass(stock.price, average)}">${money(average)}</span><small>${movingDistance(stock.price, average)}</small></div>`;
-    }).join('')}
-  </div>
-</td>`;
+const metricGroupCell = (stock, periods, expirationKey) => {
+  const strike = stock.options?.[expirationKey]?.puts?.middle?.strike;
+  const strikeLabel = strike ? `Selected strike ${money(strike)}` : 'No qualifying strike for the selected expiration';
+  return `<td class="metric-cell metric-group-cell" title="${escapeHtml(strikeLabel)}">
+    <div class="metric-group">
+      ${periods.map((period) => {
+        const average = stock[`moving${period}`];
+        return `<div class="metric-line"><b>MA ${period}</b><span class="${movingClass(strike, average)}">${money(average)}</span><small>${movingDistance(strike, average)}</small></div>`;
+      }).join('')}
+    </div>
+  </td>`;
+};
 
 const rowTemplate = (stock) => {
   const nextOptions = stock.options?.nextFriday || {};
@@ -243,8 +252,8 @@ const rowTemplate = (stock) => {
     <td class="juice-cell">${juiceCell(stock, 'nextFriday')}</td>
     <td class="option-cell">${rowOptions(followingOptions.puts, stock.price)}</td>
     <td class="juice-cell">${juiceCell(stock, 'followingFriday')}</td>
-    ${metricGroupCell(stock, [15, 30, 50])}
-    ${metricGroupCell(stock, [90, 120])}
+    ${metricGroupCell(stock, [15, 30, 50], watchlistJuiceSortExpiration)}
+    ${metricGroupCell(stock, [90, 120], watchlistJuiceSortExpiration)}
     <td class="remove-cell"><button class="remove" data-symbol="${safeSymbol}" title="Remove ${safeSymbol}" aria-label="Remove ${safeSymbol}">×</button></td>
   </tr>`;
 };
@@ -265,8 +274,8 @@ const marketLoserRowTemplate = (stock) => {
     <td class="juice-cell">${juiceCell(stock, 'nextFriday')}</td>
     <td class="option-cell">${rowOptions(followingOptions.puts, stock.price)}</td>
     <td class="juice-cell">${juiceCell(stock, 'followingFriday')}</td>
-    ${metricGroupCell(stock, [15, 30, 50])}
-    ${metricGroupCell(stock, [90, 120])}
+    ${metricGroupCell(stock, [15, 30, 50], marketJuiceSortExpiration)}
+    ${metricGroupCell(stock, [90, 120], marketJuiceSortExpiration)}
   </tr>`;
 };
 
