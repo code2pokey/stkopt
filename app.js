@@ -161,7 +161,7 @@ const movingClass = (strike, average) => {
   return strike >= average ? 'positive' : 'negative';
 };
 
-const downsideClass = (stockPrice, strike) => Number(strike) <= Number(stockPrice) ? '' : 'negative';
+const downsideClass = (stockPrice, strike) => Number(strike) <= Number(stockPrice) ? 'positive' : 'negative';
 
 const strikeDistance = (stockPrice, strike) => {
   if (!stockPrice || !strike) return { label: '—' };
