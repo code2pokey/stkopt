@@ -47,8 +47,8 @@ OPTION_ROWS_CACHE_TTL_SECONDS = 2 * 60
 OPTION_ROWS_CACHE_MAX_ENTRIES = 64
 OPTION_ROWS_CACHE = {}
 OPTION_ROWS_CACHE_LOCK = threading.Lock()
-CBOE_SYMBOL_LOCKS = tuple(threading.Lock() for _ in range(16))
-CBOE_FETCH_SEMAPHORE = threading.BoundedSemaphore(2)
+OPTION_SYMBOL_LOCKS = tuple(threading.Lock() for _ in range(16))
+OPTION_FETCH_SEMAPHORE = threading.BoundedSemaphore(2)
 MARKET_SCAN_SEMAPHORE = threading.BoundedSemaphore(1)
 
 
@@ -285,11 +285,76 @@ def yahoo_json(url):
         return json.loads(response.read().decode("utf-8"))
 
 
-def uncached_cboe_json(symbol):
-    url = "https://cdn.cboe.com/api/global/delayed_quotes/options/" + urllib.parse.quote(symbol) + ".json"
-    request = urllib.request.Request(url, headers=YAHOO_HEADERS)
+def nasdaq_number(value):
+    if value is None:
+        return 0
+    if isinstance(value, (int, float)):
+        return value
+    cleaned = str(value).strip().replace(",", "").replace("$", "")
+    if cleaned in ("", "--", "N/A"):
+        return 0
+    negative = cleaned.startswith("(") and cleaned.endswith(")")
+    cleaned = cleaned.strip("()")
+    try:
+        number = float(cleaned)
+    except ValueError:
+        return 0
+    return -number if negative else number
+
+
+def uncached_nasdaq_option_rows(symbol, expiration_dates):
+    query = urllib.parse.urlencode({
+        "assetclass": "stocks",
+        "limit": 5000,
+        "fromdate": min(expiration_dates).isoformat(),
+        "todate": max(expiration_dates).isoformat(),
+    })
+    url = (
+        "https://api.nasdaq.com/api/quote/"
+        + urllib.parse.quote(symbol)
+        + "/option-chain?"
+        + query
+    )
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Origin": "https://www.nasdaq.com",
+        "Referer": "https://www.nasdaq.com/",
+    }
+    request = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(request, timeout=15) as response:
-        return json.loads(response.read().decode("utf-8"))
+        payload = json.loads(response.read().decode("utf-8"))
+
+    data = payload.get("data") or {}
+    rows = (data.get("table") or {}).get("rows") or []
+    target_by_month_day = {
+        (expiration.month, expiration.day): expiration
+        for expiration in expiration_dates
+    }
+    option_rows = []
+    for row in rows:
+        expiration_text = (row.get("expiryDate") or "").strip()
+        if not expiration_text or not row.get("strike"):
+            continue
+        try:
+            parsed_expiration = datetime.strptime(expiration_text, "%b %d")
+        except ValueError:
+            continue
+        expiration = target_by_month_day.get((parsed_expiration.month, parsed_expiration.day))
+        if not expiration:
+            continue
+        option_rows.append({
+            "expiration_date": expiration,
+            "strike": nasdaq_number(row.get("strike")),
+            "bid": nasdaq_number(row.get("p_Bid")),
+            "ask": nasdaq_number(row.get("p_Ask")),
+            "last_trade_price": nasdaq_number(row.get("p_Last")),
+            "price_change": nasdaq_number(row.get("p_Change")),
+            "volume": nasdaq_number(row.get("p_Volume")),
+            "open_interest": nasdaq_number(row.get("p_Openinterest")),
+            "iv": None,
+        })
+    return option_rows
 
 
 def market_loser_candidates(minimum_market_cap, drop_percent, limit=10):
@@ -407,35 +472,7 @@ def is_biotechnology_or_pharmaceutical(classification):
     )
 
 
-def closest_option(options, target_ratio):
-    if not options:
-        return None
-    ranked = []
-    for option in options:
-        strike = option.get("strike", 0) or 0
-        premium = option.get("lastPrice", 0) or option.get("mark", 0) or 0
-        if strike <= 0 or premium <= 0:
-            continue
-        ratio = premium / strike
-        ranked.append((abs(ratio - target_ratio), option))
-    if not ranked:
-        return None
-    return min(ranked, key=lambda item: item[0])[1]
-
-
 def option_view(option):
-    if not option:
-        return None
-    return {
-        "premium": option.get("lastPrice", 0) or option.get("mark", 0) or 0,
-        "strike": option.get("strike", 0) or 0,
-        "change": option.get("percentChange", 0) or 0,
-        "volume": option.get("volume", 0) or 0,
-        "ratio": ((option.get("lastPrice", 0) or option.get("mark", 0) or 0) / (option.get("strike", 1) or 1)) * 100,
-    }
-
-
-def cboe_option_view(option):
     bid = option.get("bid", 0) or 0
     last = option.get("last_trade_price", 0) or 0
     # For a cash-secured put sale, the bid is the currently available
@@ -445,11 +482,11 @@ def cboe_option_view(option):
     return {
         "premium": premium,
         "strike": strike,
-        "change": option.get("percent_change", 0) or 0,
+        "change": option.get("price_change", 0) or 0,
         "volume": option.get("volume", 0) or 0,
         "ratio": (premium / strike) * 100 if strike else 0,
         "openInterest": option.get("open_interest", 0) or 0,
-        "impliedVolatility": option.get("iv", 0) or 0,
+        "impliedVolatility": option.get("iv"),
     }
 
 
@@ -466,17 +503,12 @@ def qualifying_puts(puts, target_percent):
         key=lambda put: abs(((put.get("bid", 0) or 0) / put["strike"]) - target_ratio),
     ) if valid_puts else None
     return {
-        "middle": cboe_option_view(nearest) if nearest else None,
+        "middle": option_view(nearest) if nearest else None,
     }
 
 
 def cached_option_rows(symbol, today):
-    """Return only the two useful put expirations, never the full Cboe chain.
-
-    A full chain can be several megabytes once decoded into Python objects. The
-    old cache retained that entire object graph for every scanned ticker. This
-    cache stores a bounded set of compact rows instead.
-    """
+    """Return current Nasdaq put rows for exactly the two displayed dates."""
     cache_key = (symbol, today.isoformat())
     now = time.time()
     stale_value = None
@@ -487,7 +519,7 @@ def cached_option_rows(symbol, today):
             if cached["expires_at"] > now:
                 return stale_value
 
-    symbol_lock = CBOE_SYMBOL_LOCKS[hash(symbol) % len(CBOE_SYMBOL_LOCKS)]
+    symbol_lock = OPTION_SYMBOL_LOCKS[hash(symbol) % len(OPTION_SYMBOL_LOCKS)]
     with symbol_lock:
         now = time.time()
         with OPTION_ROWS_CACHE_LOCK:
@@ -498,65 +530,25 @@ def cached_option_rows(symbol, today):
                     return stale_value
 
         try:
-            with CBOE_FETCH_SEMAPHORE:
-                cboe_rows = uncached_cboe_json(symbol)["data"]["options"]
-
-            expiration_dates = set()
-            for row in cboe_rows:
-                contract = row.get("option", "")
-                suffix = contract[len(symbol):]
-                if len(suffix) != 15 or suffix[6] != "P":
-                    continue
-                try:
-                    expiration_date = datetime.strptime(suffix[:6], "%y%m%d").date()
-                except (TypeError, ValueError):
-                    continue
-                if expiration_date >= today:
-                    expiration_dates.add(expiration_date)
-
-            expiration_dates = sorted(expiration_dates)
             days_to_friday = (4 - today.weekday()) % 7 or 7
             targets = (
                 ("nextFriday", today + timedelta(days=days_to_friday)),
                 ("followingFriday", today + timedelta(days=days_to_friday + 7)),
             )
-            selected_dates = {}
-            for key, target in targets:
-                # A contract belongs in a column only when its expiration is
-                # exactly the date printed in that column. Do not substitute a
-                # later monthly expiration for a missing weekly expiration.
-                selected_dates[key] = target if target in expiration_dates else None
+            target_dates = [expiration for _, expiration in targets]
+            with OPTION_FETCH_SEMAPHORE:
+                option_rows = uncached_nasdaq_option_rows(symbol, target_dates)
 
-            rows_by_expiration = {
-                expiration: [] for expiration in set(selected_dates.values()) if expiration
-            }
-            for row in cboe_rows:
-                contract = row.get("option", "")
-                suffix = contract[len(symbol):]
-                if len(suffix) != 15 or suffix[6] != "P":
-                    continue
-                try:
-                    expiration_date = datetime.strptime(suffix[:6], "%y%m%d").date()
-                    strike = int(suffix[7:]) / 1000
-                except (TypeError, ValueError):
-                    continue
-                if expiration_date not in rows_by_expiration:
-                    continue
-                rows_by_expiration[expiration_date].append({
-                    "bid": row.get("bid", 0) or 0,
-                    "last_trade_price": row.get("last_trade_price", 0) or 0,
-                    "percent_change": row.get("percent_change", 0) or 0,
-                    "volume": row.get("volume", 0) or 0,
-                    "open_interest": row.get("open_interest", 0) or 0,
-                    "iv": row.get("iv", 0) or 0,
-                    "strike": strike,
-                })
+            rows_by_expiration = {expiration: [] for expiration in target_dates}
+            for row in option_rows:
+                rows_by_expiration[row["expiration_date"]].append(row)
 
             value = {}
-            for key, expiration in selected_dates.items():
+            for key, expiration in targets:
+                rows = rows_by_expiration.get(expiration, [])
                 value[key] = {
-                    "rows": rows_by_expiration.get(expiration, []),
-                    "date": f"{expiration:%b} {expiration.day}" if expiration else None,
+                    "rows": rows,
+                    "date": f"{expiration:%b} {expiration.day}" if rows else None,
                 }
         except Exception:
             if stale_value is not None:
