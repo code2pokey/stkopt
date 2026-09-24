@@ -213,10 +213,13 @@ const earningsCell = (earnings) => {
 
 const rowOption = (option, stockPrice) => {
   const distance = strikeDistance(stockPrice, option.strike);
+  const impliedVolatility = option.impliedVolatility == null
+    ? '—'
+    : signedPercent(Number(option.impliedVolatility) * 100);
   return `<div class="put-line">
     <span class="option-main"><b>${money(option.premium)}</b><em>/</em>${money(option.strike)}</span>
     <span class="option-underlying ${downsideClass(stockPrice, option.strike)}">Spot ${money(stockPrice)} · ${distance.label}</span>
-    <span class="option-stats">V ${Number(option.volume || 0).toLocaleString()} · OI ${Number(option.openInterest || 0).toLocaleString()} · IV ${signedPercent(Number(option.impliedVolatility || 0) * 100)} · R ${Number(option.ratio || 0).toFixed(2)}%</span>
+    <span class="option-stats">V ${Number(option.volume || 0).toLocaleString()} · OI ${Number(option.openInterest || 0).toLocaleString()} · IV ${impliedVolatility} · R ${Number(option.ratio || 0).toFixed(2)}%</span>
   </div>`;
 };
 
