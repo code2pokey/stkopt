@@ -1005,6 +1005,7 @@ class Handler(SimpleHTTPRequestHandler):
             target = urllib.parse.parse_qs(parsed.query).get("target", ["1.0"])[0]
             try:
                 payload = fetch_stock(symbol, float(target))
+                payload["putYield30"] = thetahedge_put_yield(payload["symbol"])
                 body = json.dumps(payload).encode("utf-8")
                 self.send_response(200)
             except Exception as error:
