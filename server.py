@@ -43,6 +43,12 @@ COMPANY_CLASSIFICATION_RETRY_SECONDS = 5 * 60
 COMPANY_CLASSIFICATION_CACHE_MAX_ENTRIES = 512
 COMPANY_CLASSIFICATION_CACHE = {}
 COMPANY_CLASSIFICATION_LOCK = threading.Lock()
+PUT_YIELD_CACHE_TTL_SECONDS = 5 * 60
+PUT_YIELD_RETRY_SECONDS = 2 * 60
+PUT_YIELD_CACHE_MAX_ENTRIES = 512
+PUT_YIELD_CACHE = {}
+PUT_YIELD_CACHE_LOCK = threading.Lock()
+PUT_YIELD_FETCH_SEMAPHORE = threading.BoundedSemaphore(4)
 OPTION_ROWS_CACHE_TTL_SECONDS = 2 * 60
 OPTION_ROWS_CACHE_MAX_ENTRIES = 64
 OPTION_ROWS_CACHE = {}
@@ -285,6 +291,67 @@ def yahoo_json(url):
         return json.loads(response.read().decode("utf-8"))
 
 
+def thetahedge_put_yield(symbol):
+    """Return the public 30-delta/30-DTE put-yield snapshot for a symbol."""
+    now = time.time()
+    with PUT_YIELD_CACHE_LOCK:
+        cached = PUT_YIELD_CACHE.get(symbol)
+        if cached and cached["expires_at"] > now:
+            return cached["value"]
+
+    value = None
+    try:
+        query = urllib.parse.urlencode({
+            "what": "yeild_options_widget_realtime",
+            "symbol": symbol,
+        })
+        request = urllib.request.Request(
+            "https://app.thetahedge.io/api/widgets?" + query,
+            headers={"User-Agent": YAHOO_HEADERS["User-Agent"], "Accept": "application/json"},
+        )
+        with PUT_YIELD_FETCH_SEMAPHORE:
+            with urllib.request.urlopen(request, timeout=15) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        row = next(
+            (
+                item for item in payload
+                if (item.get("symbol") or "").upper() == symbol
+            ),
+            None,
+        ) if isinstance(payload, list) else None
+        if row:
+            value = {
+                "current": row.get("avg_30d_put_yield"),
+                "average3Month": row.get("wheel_avg_put_yield_3m"),
+                "strike": row.get("put_30d_strike"),
+                "expiration": row.get("put_30d_expiry"),
+                "updatedAt": row.get("rcq_timestamp"),
+                "source": "ThetaHedge",
+            }
+    except Exception as error:
+        print("Put-yield snapshot error for %s: %s" % (symbol, str(error)[:180]))
+
+    with PUT_YIELD_CACHE_LOCK:
+        expired_symbols = [
+            cached_symbol
+            for cached_symbol, cached in PUT_YIELD_CACHE.items()
+            if cached["expires_at"] <= now
+        ]
+        for cached_symbol in expired_symbols:
+            PUT_YIELD_CACHE.pop(cached_symbol, None)
+        while len(PUT_YIELD_CACHE) >= PUT_YIELD_CACHE_MAX_ENTRIES:
+            oldest_symbol = min(
+                PUT_YIELD_CACHE,
+                key=lambda cached_symbol: PUT_YIELD_CACHE[cached_symbol]["expires_at"],
+            )
+            PUT_YIELD_CACHE.pop(oldest_symbol, None)
+        PUT_YIELD_CACHE[symbol] = {
+            "expires_at": now + (PUT_YIELD_CACHE_TTL_SECONDS if value else PUT_YIELD_RETRY_SECONDS),
+            "value": value,
+        }
+    return value
+
+
 def nasdaq_number(value):
     if value is None:
         return 0
@@ -357,7 +424,12 @@ def uncached_nasdaq_option_rows(symbol, expiration_dates):
     return option_rows
 
 
-def market_loser_candidates(minimum_market_cap, drop_percent, limit=10):
+def market_loser_candidates(
+    minimum_market_cap,
+    drop_percent,
+    limit=10,
+    maximum_market_cap=None,
+):
     """Return today's steepest equity decliners matching configurable filters."""
     now = time.time()
     if MARKET_LOSERS_CACHE["expires_at"] <= now:
@@ -389,6 +461,7 @@ def market_loser_candidates(minimum_market_cap, drop_percent, limit=10):
             symbol
             and quote.get("quoteType") == "EQUITY"
             and market_cap >= minimum_market_cap
+            and (maximum_market_cap is None or market_cap <= maximum_market_cap)
             and change is not None
             and change < -drop_percent
         ):
@@ -700,12 +773,14 @@ def fetch_stock(symbol, target_percent=1.0):
         "earningsStatus": earnings_status,
         "earningsMessage": earnings_message,
         "options": options,
+        "putYield30": None,
     }
 
 
 def fetch_market_losers(
     target_percent=1.0,
     minimum_market_cap=10_000_000_000,
+    maximum_market_cap=None,
     drop_percent=10,
     rank_expiration="nextFriday",
     minimum_return_percent=0.8,
@@ -717,6 +792,7 @@ def fetch_market_losers(
         minimum_market_cap,
         drop_percent,
         candidate_limit,
+        maximum_market_cap,
     )
     if not candidates:
         return []
@@ -801,7 +877,25 @@ def fetch_market_losers(
         and (selected_option(stock).get("ratio") or 0) > minimum_return_percent
     ]
     qualifying_stocks.sort(key=juice_score, reverse=True)
-    return qualifying_stocks[:min(limit, 10)]
+    ranked_stocks = qualifying_stocks[:min(limit, 10)]
+
+    # This snapshot is displayed only by the daily-drop table. Fetch it after
+    # filtering so no more than the final ten rows call the external provider.
+    if ranked_stocks:
+        yield_workers = min(4, len(ranked_stocks))
+        with ThreadPoolExecutor(max_workers=yield_workers) as executor:
+            futures = {
+                executor.submit(thetahedge_put_yield, stock["symbol"]): stock
+                for stock in ranked_stocks
+            }
+            for future in as_completed(futures):
+                stock = futures[future]
+                try:
+                    stock["putYield30"] = future.result()
+                except Exception:
+                    stock["putYield30"] = None
+
+    return ranked_stocks
 
 
 class BoundedThreadingHTTPServer(ThreadingHTTPServer):
@@ -835,6 +929,7 @@ class Handler(SimpleHTTPRequestHandler):
             query = urllib.parse.parse_qs(parsed.query)
             target = query.get("target", ["1.0"])[0]
             market_cap_billions = query.get("marketCapBillions", ["10"])[0]
+            maximum_market_cap_billions = query.get("maximumMarketCapBillions", ["0"])[0]
             drop_percent = query.get("dropPercent", ["10"])[0]
             rank_expiration = query.get("rankExpiration", ["nextFriday"])[0]
             minimum_return_percent = query.get("minimumReturnPercent", ["0.8"])[0]
@@ -843,28 +938,44 @@ class Handler(SimpleHTTPRequestHandler):
             try:
                 target = float(target)
                 market_cap_billions = float(market_cap_billions)
+                maximum_market_cap_billions = float(maximum_market_cap_billions)
                 drop_percent = float(drop_percent)
                 minimum_return_percent = float(minimum_return_percent)
                 if rank_expiration not in ("nextFriday", "followingFriday"):
                     raise ValueError("Rank expiration must be nextFriday or followingFriday")
-                if market_cap_billions <= 0 or drop_percent <= 0 or minimum_return_percent < 0:
+                if (
+                    market_cap_billions <= 0
+                    or maximum_market_cap_billions < 0
+                    or (
+                        maximum_market_cap_billions > 0
+                        and maximum_market_cap_billions <= market_cap_billions
+                    )
+                    or drop_percent <= 0
+                    or minimum_return_percent < 0
+                ):
                     raise ValueError("Market cap and filter percentages must be valid")
                 scan_acquired = MARKET_SCAN_SEMAPHORE.acquire(timeout=5)
                 if not scan_acquired:
                     raise TimeoutError("The market scanner is busy; please try again shortly.")
                 minimum_market_cap = int(market_cap_billions * 1_000_000_000)
+                maximum_market_cap = (
+                    int(maximum_market_cap_billions * 1_000_000_000)
+                    if maximum_market_cap_billions > 0 else None
+                )
                 payload = {
                     "stocks": fetch_market_losers(
-                        target,
-                        minimum_market_cap,
-                        drop_percent,
-                        rank_expiration,
-                        minimum_return_percent,
-                        10,
+                        target_percent=target,
+                        minimum_market_cap=minimum_market_cap,
+                        maximum_market_cap=maximum_market_cap,
+                        drop_percent=drop_percent,
+                        rank_expiration=rank_expiration,
+                        minimum_return_percent=minimum_return_percent,
+                        limit=10,
                     ),
                     "criteria": {
                         "changePercentBelow": -drop_percent,
                         "minimumMarketCap": minimum_market_cap,
+                        "maximumMarketCap": maximum_market_cap,
                         "minimumReturnPercent": minimum_return_percent,
                         "rankExpiration": rank_expiration,
                         "limit": 10,
