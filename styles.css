@@ -802,7 +802,7 @@ footer {
 .market-losers-filters {
   display: grid;
   width: 100%;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   flex-shrink: 0;
 }
 
@@ -1291,6 +1291,40 @@ tbody tr:last-child td {
 
 .market-cap-cell > span {
   color: var(--ink);
+}
+
+.price-put-yield {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 4px 7px;
+  margin-top: 13px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(194, 132, 255, 0.14);
+}
+
+.price-put-yield > b {
+  color: var(--muted-2);
+  font: 500 7px var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.price-put-yield > span {
+  justify-self: start;
+  padding: 3px 5px;
+  color: var(--purple-bright);
+  background: rgba(165, 77, 255, 0.1);
+}
+
+.price-put-yield > small {
+  grid-column: 1 / -1;
+  max-width: 205px;
+  margin-top: 0;
+  color: var(--muted-2);
+  font: 8px var(--font-mono);
+  line-height: 1.45;
+  white-space: normal;
 }
 
 .metric-group-cell {
