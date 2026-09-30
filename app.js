@@ -52,6 +52,7 @@ const marketLosersEmptyMessage = document.querySelector('#market-losers-empty-me
 const marketLosersCount = document.querySelector('#market-losers-count');
 const marketLosersShell = document.querySelector('#market-losers-shell');
 const marketCapSelect = document.querySelector('#market-cap-select');
+const maximumMarketCapSelect = document.querySelector('#maximum-market-cap-select');
 const dropPercentSelect = document.querySelector('#drop-percent-select');
 
 const storageKey = 'stockoption-watchlist';
@@ -60,6 +61,7 @@ const marketTargetStorageKey = 'stockoption-market-target-percent';
 const juiceSortStorageKey = 'stockoption-juice-sort-expiration';
 const marketJuiceSortStorageKey = 'stockoption-market-juice-sort-expiration';
 const marketCapStorageKey = 'stockoption-minimum-market-cap-billions';
+const maximumMarketCapStorageKey = 'stockoption-maximum-market-cap-billions';
 const dropPercentStorageKey = 'stockoption-minimum-drop-percent';
 const minimumOptionReturnPercent = 0.80;
 const defaultSymbols = ['ASTS', 'INTC', 'NVDA', 'ALAB', 'TSLA', 'AAOI', 'NBIS'];
@@ -77,6 +79,7 @@ let symbols = storedSymbols();
 let watchlistTargetPercent = Number(localStorage.getItem(targetStorageKey) || '1.00');
 let marketTargetPercent = Number(localStorage.getItem(marketTargetStorageKey) || '1.00');
 let minimumMarketCapBillions = Number(localStorage.getItem(marketCapStorageKey) || '10');
+let maximumMarketCapBillions = Number(localStorage.getItem(maximumMarketCapStorageKey) || '0');
 let minimumDropPercent = Number(localStorage.getItem(dropPercentStorageKey) || '10');
 let watchlistJuiceSortExpiration = localStorage.getItem(juiceSortStorageKey) === 'followingFriday'
   ? 'followingFriday'
@@ -111,12 +114,31 @@ marketTargetSelect.value = marketTargetPercent.toFixed(2);
 juiceSortSelect.value = watchlistJuiceSortExpiration;
 marketJuiceSortSelect.value = marketJuiceSortExpiration;
 marketCapSelect.value = String(minimumMarketCapBillions);
+maximumMarketCapSelect.value = String(maximumMarketCapBillions);
 dropPercentSelect.value = String(minimumDropPercent);
 
 if (!marketCapSelect.value) {
   minimumMarketCapBillions = 10;
   marketCapSelect.value = '10';
 }
+if (!maximumMarketCapSelect.value) {
+  maximumMarketCapBillions = 0;
+  maximumMarketCapSelect.value = '0';
+}
+
+function syncMaximumMarketCapOptions() {
+  [...maximumMarketCapSelect.options].forEach((option) => {
+    const value = Number(option.value);
+    option.disabled = value > 0 && value <= minimumMarketCapBillions;
+  });
+  if (maximumMarketCapBillions > 0 && maximumMarketCapBillions <= minimumMarketCapBillions) {
+    maximumMarketCapBillions = 0;
+    maximumMarketCapSelect.value = '0';
+    localStorage.setItem(maximumMarketCapStorageKey, '0');
+  }
+}
+
+syncMaximumMarketCapOptions();
 if (!dropPercentSelect.value) {
   minimumDropPercent = 10;
   dropPercentSelect.value = '10';
@@ -139,6 +161,10 @@ const marketCap = (value) => {
   return `$${(number / 1e9).toFixed(1)}B`;
 };
 
+const marketCapRangeLabel = () => maximumMarketCapBillions > 0
+  ? `$${minimumMarketCapBillions}B–$${maximumMarketCapBillions}B`
+  : `$${minimumMarketCapBillions}B+`;
+
 const signedPercent = (value) => {
   if (value == null || Number.isNaN(Number(value))) return '—';
   const number = Number(value);
@@ -149,6 +175,40 @@ const signedMoney = (value) => {
   if (value == null || Number.isNaN(Number(value))) return '—';
   const number = Number(value);
   return `${number >= 0 ? '+' : '-'}$${Math.abs(number).toFixed(2)}`;
+};
+
+const formatYieldExpiration = (value) => {
+  const parts = String(value || '').split('-').map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isFinite(part))) return String(value || '—');
+  return new Date(parts[0], parts[1] - 1, parts[2]).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+};
+
+const putYield30Block = (stock) => {
+  const snapshot = stock?.putYield30;
+  const current = snapshot?.current == null ? Number.NaN : Number(snapshot.current);
+  const average3Month = snapshot?.average3Month == null ? Number.NaN : Number(snapshot.average3Month);
+  if (!Number.isFinite(current)) {
+    return `<div class="price-put-yield">
+      <b>30Δ put yield</b>
+      <span>—</span>
+      <small>No 30 DTE contract · 3M avg —</small>
+    </div>`;
+  }
+
+  const strike = snapshot?.strike == null ? Number.NaN : Number(snapshot.strike);
+  const contract = Number.isFinite(strike) && snapshot?.expiration
+    ? `${money(strike)} Put @ ${formatYieldExpiration(snapshot.expiration)}`
+    : 'Contract unavailable';
+  const averageLabel = Number.isFinite(average3Month) ? `${average3Month.toFixed(2)}%` : '—';
+  return `<div class="price-put-yield" title="30-delta, approximately 30-DTE put-yield snapshot from ThetaHedge">
+    <b>30Δ put yield</b>
+    <span>${current.toFixed(2)}%</span>
+    <small>${escapeHtml(contract)} · 3M avg ${averageLabel}</small>
+  </div>`;
 };
 
 const movingDistance = (referenceValue, average) => {
@@ -271,8 +331,8 @@ const marketLoserRowTemplate = (stock) => {
 
   return `<tr>
     <td class="stock-cell"><strong>${safeSymbol}</strong><span title="${escapeHtml(stock.name)}">${escapeHtml(stock.name)}</span>${industry}<div class="stock-earnings"><b>Earnings</b>${earningsCell(stock.nextEarnings)}</div></td>
-    <td class="price-cell"><span class="negative">${money(stock.price)}</span><small class="negative">${signedMoney(stock.priceChange)} / ${signedPercent(stock.change)}</small></td>
-    <td class="market-cap-cell"><span>${marketCap(stock.marketCap)}</span><small>Minimum $${minimumMarketCapBillions}B</small></td>
+    <td class="price-cell"><span class="negative">${money(stock.price)}</span><small class="negative">${signedMoney(stock.priceChange)} / ${signedPercent(stock.change)}</small>${putYield30Block(stock)}</td>
+    <td class="market-cap-cell"><span>${marketCap(stock.marketCap)}</span><small>${marketCapRangeLabel()}</small></td>
     <td class="option-cell">${rowOptions(nextOptions.puts, stock.price)}</td>
     <td class="juice-cell">${juiceCell(stock, 'nextFriday')}</td>
     <td class="option-cell">${rowOptions(followingOptions.puts, stock.price)}</td>
@@ -313,7 +373,7 @@ function renderResults(results) {
 
 function renderMarketLosers(stocks, error = '') {
   const expirationLabel = marketJuiceSortExpiration === 'followingFriday' ? 'second' : 'first';
-  marketLosersEmptyMessage.textContent = `No stocks with a market cap of at least $${minimumMarketCapBillions}B are currently down more than ${minimumDropPercent}% with a ${expirationLabel}-expiration option return above ${minimumOptionReturnPercent.toFixed(2)}%.`;
+  marketLosersEmptyMessage.textContent = `No stocks in the ${marketCapRangeLabel()} market-cap range are currently down more than ${minimumDropPercent}% with a ${expirationLabel}-expiration option return above ${minimumOptionReturnPercent.toFixed(2)}%.`;
   if (error) {
     latestMarketLosers = [];
     marketLosersList.innerHTML = `<tr class="error-row"><td colspan="9">Daily-drop scan: ${escapeHtml(error)}. Try refreshing.</td></tr>`;
@@ -348,6 +408,7 @@ async function loadMarketLosers() {
   const query = new URLSearchParams({
     target: String(marketTargetPercent),
     marketCapBillions: String(minimumMarketCapBillions),
+    maximumMarketCapBillions: String(maximumMarketCapBillions),
     dropPercent: String(minimumDropPercent),
     rankExpiration: marketJuiceSortExpiration,
     minimumReturnPercent: String(minimumOptionReturnPercent),
@@ -452,6 +513,13 @@ marketTargetSelect.addEventListener('change', () => {
 marketCapSelect.addEventListener('change', () => {
   minimumMarketCapBillions = Number(marketCapSelect.value);
   localStorage.setItem(marketCapStorageKey, String(minimumMarketCapBillions));
+  syncMaximumMarketCapOptions();
+  loadMarketLosers();
+});
+
+maximumMarketCapSelect.addEventListener('change', () => {
+  maximumMarketCapBillions = Number(maximumMarketCapSelect.value);
+  localStorage.setItem(maximumMarketCapStorageKey, String(maximumMarketCapBillions));
   loadMarketLosers();
 });
 
