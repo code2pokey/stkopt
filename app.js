@@ -310,7 +310,7 @@ const rowTemplate = (stock) => {
 
   return `<tr>
     <td class="stock-cell"><strong>${safeSymbol}</strong><span title="${escapeHtml(stock.name)}">${escapeHtml(stock.name)}</span><div class="stock-earnings"><b>Earnings</b>${earningsCell(stock.nextEarnings)}</div></td>
-    <td class="price-cell"><span class="${changeClass}">${money(stock.price)}</span><small class="${changeClass}">${signedMoney(stock.priceChange)} / ${signedPercent(stock.change)}</small></td>
+    <td class="price-cell"><span class="${changeClass}">${money(stock.price)}</span><small class="${changeClass}">${signedMoney(stock.priceChange)} / ${signedPercent(stock.change)}</small>${putYield30Block(stock)}</td>
     <td class="option-cell">${rowOptions(nextOptions.puts, stock.price)}</td>
     <td class="juice-cell">${juiceCell(stock, 'nextFriday')}</td>
     <td class="option-cell">${rowOptions(followingOptions.puts, stock.price)}</td>
