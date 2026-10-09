@@ -1,4 +1,5 @@
 import csv
+import gzip
 import io
 import json
 import os
@@ -226,10 +227,13 @@ def yahoo_earnings(symbol):
         encoded = urllib.parse.quote(symbol)
         request = urllib.request.Request(
             "https://finance.yahoo.com/quote/" + encoded + "/",
-            headers=YAHOO_HEADERS,
+            headers={**YAHOO_HEADERS, "Accept-Encoding": "gzip"},
         )
         with urllib.request.urlopen(request, timeout=20) as response:
-            page = response.read().decode("utf-8", "ignore").replace('\\"', '"')
+            page_bytes = response.read()
+            if response.headers.get("Content-Encoding") == "gzip":
+                page_bytes = gzip.decompress(page_bytes)
+            page = page_bytes.decode("utf-8", "ignore").replace('\\"', '"')
 
         calendar_match = re.search(
             r'"earningsDate":\[(.*?)\],"isEarningsDateEstimate":(true|false)',
@@ -692,7 +696,32 @@ def previous_trading_close(meta, timestamps, closes, current_price):
     return last_close
 
 
-def fetch_stock(symbol, target_percent=1.0):
+def stock_earnings(symbol):
+    """Return the best available earnings record and its source status."""
+    calendar = earnings_calendar()
+    next_earnings = calendar.get(symbol)
+    earnings_status = EARNINGS_CACHE["status"]
+    earnings_message = EARNINGS_CACHE["message"]
+    if not next_earnings:
+        next_earnings = nasdaq_earnings_calendar().get(symbol)
+        if next_earnings:
+            earnings_status = "ok_nasdaq_fallback"
+            earnings_message = "Nasdaq supplied the date because Alpha Vantage was unavailable."
+    if not next_earnings:
+        next_earnings = yahoo_earnings(symbol)
+        if next_earnings:
+            earnings_status = (
+                "ok_yahoo_estimate" if next_earnings.get("isEstimate") else "ok_yahoo_fallback"
+            )
+            earnings_message = (
+                "Yahoo Finance supplied an estimated date."
+                if next_earnings.get("isEstimate")
+                else "Yahoo Finance supplied the announced date."
+            )
+    return next_earnings, earnings_status, earnings_message
+
+
+def fetch_stock(symbol, target_percent=1.0, include_earnings=True):
     symbol = symbol.upper().strip()
     encoded = urllib.parse.quote(symbol)
     chart_url = (
@@ -735,26 +764,12 @@ def fetch_stock(symbol, target_percent=1.0):
     except Exception:
         pass
 
-    calendar = earnings_calendar()
-    next_earnings = calendar.get(symbol)
-    earnings_status = EARNINGS_CACHE["status"]
-    earnings_message = EARNINGS_CACHE["message"]
-    if not next_earnings:
-        next_earnings = nasdaq_earnings_calendar().get(symbol)
-        if next_earnings:
-            earnings_status = "ok_nasdaq_fallback"
-            earnings_message = "Nasdaq supplied the date because Alpha Vantage was unavailable."
-    if not next_earnings:
-        next_earnings = yahoo_earnings(symbol)
-        if next_earnings:
-            earnings_status = (
-                "ok_yahoo_estimate" if next_earnings.get("isEstimate") else "ok_yahoo_fallback"
-            )
-            earnings_message = (
-                "Yahoo Finance supplied an estimated date."
-                if next_earnings.get("isEstimate")
-                else "Yahoo Finance supplied the announced date."
-            )
+    if include_earnings:
+        next_earnings, earnings_status, earnings_message = stock_earnings(symbol)
+    else:
+        next_earnings = None
+        earnings_status = "deferred"
+        earnings_message = "Earnings lookup is deferred until this stock is selected for display."
     return {
         "symbol": symbol,
         "name": meta.get("longName") or meta.get("shortName") or symbol,
@@ -824,7 +839,12 @@ def fetch_market_losers(
     worker_count = min(4, len(candidates))
     with ThreadPoolExecutor(max_workers=worker_count) as executor:
         futures = {
-            executor.submit(fetch_stock, candidate["symbol"], target_percent): candidate
+            executor.submit(
+                fetch_stock,
+                candidate["symbol"],
+                target_percent,
+                False,
+            ): candidate
             for candidate in candidates
         }
         for future in as_completed(futures):
@@ -879,8 +899,29 @@ def fetch_market_losers(
     qualifying_stocks.sort(key=juice_score, reverse=True)
     ranked_stocks = qualifying_stocks[:min(limit, 10)]
 
-    # This snapshot is displayed only by the daily-drop table. Fetch it after
-    # filtering so no more than the final ten rows call the external provider.
+    # A Yahoo earnings fallback downloads an entire quote page. Defer that
+    # work until after ranking so at most the ten displayed rows incur it.
+    if ranked_stocks:
+        earnings_workers = min(4, len(ranked_stocks))
+        with ThreadPoolExecutor(max_workers=earnings_workers) as executor:
+            futures = {
+                executor.submit(stock_earnings, stock["symbol"]): stock
+                for stock in ranked_stocks
+            }
+            for future in as_completed(futures):
+                stock = futures[future]
+                try:
+                    next_earnings, earnings_status, earnings_message = future.result()
+                    stock["nextEarnings"] = next_earnings
+                    stock["earningsStatus"] = earnings_status
+                    stock["earningsMessage"] = earnings_message
+                except Exception as error:
+                    stock["nextEarnings"] = None
+                    stock["earningsStatus"] = "error"
+                    stock["earningsMessage"] = str(error)[:180]
+
+    # Fetch this snapshot after filtering so no more than the final ten
+    # daily-drop rows call the external provider.
     if ranked_stocks:
         yield_workers = min(4, len(ranked_stocks))
         with ThreadPoolExecutor(max_workers=yield_workers) as executor:
