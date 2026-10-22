@@ -1168,6 +1168,15 @@ tbody tr:last-child td {
   letter-spacing: -0.025em;
 }
 
+.stock-cell strong a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.stock-cell strong a:hover {
+  text-decoration: underline;
+}
+
 .stock-cell strong::before {
   display: inline-block;
   width: 3px;
