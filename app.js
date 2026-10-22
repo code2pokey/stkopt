@@ -545,4 +545,4 @@ marketJuiceSortSelect.addEventListener('change', () => {
   loadMarketLosers();
 });
 
-loadAll();
+loadAll(); 
