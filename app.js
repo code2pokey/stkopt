@@ -66,6 +66,8 @@ const dropPercentStorageKey = 'stockoption-minimum-drop-percent';
 const minimumOptionReturnPercent = 0.80;
 const defaultSymbols = ['ASTS', 'INTC', 'NVDA', 'ALAB', 'TSLA', 'AAOI', 'NBIS'];
 
+const etradeQuoteLink = (symbol) => `https://us.etrade.com/etx/mkt/quotes?symbol=${encodeURIComponent(symbol.toLowerCase())}#/snapshot`;
+
 function storedSymbols() {
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey));
@@ -307,9 +309,10 @@ const rowTemplate = (stock) => {
   const followingOptions = stock.options?.followingFriday || {};
   const changeClass = Number(stock.change) >= 0 ? 'positive' : 'negative';
   const safeSymbol = escapeHtml(stock.symbol);
+  const symbolLink = `<a href="${etradeQuoteLink(stock.symbol)}" target="_blank" rel="noopener noreferrer">${safeSymbol}</a>`;
 
   return `<tr>
-    <td class="stock-cell"><strong>${safeSymbol}</strong><span title="${escapeHtml(stock.name)}">${escapeHtml(stock.name)}</span><div class="stock-earnings"><b>Earnings</b>${earningsCell(stock.nextEarnings)}</div></td>
+    <td class="stock-cell"><strong>${symbolLink}</strong><span title="${escapeHtml(stock.name)}">${escapeHtml(stock.name)}</span><div class="stock-earnings"><b>Earnings</b>${earningsCell(stock.nextEarnings)}</div></td>
     <td class="price-cell"><span class="${changeClass}">${money(stock.price)}</span><small class="${changeClass}">${signedMoney(stock.priceChange)} / ${signedPercent(stock.change)}</small>${putYield30Block(stock)}</td>
     <td class="option-cell">${rowOptions(nextOptions.puts, stock.price)}</td>
     <td class="juice-cell">${juiceCell(stock, 'nextFriday')}</td>
@@ -325,12 +328,13 @@ const marketLoserRowTemplate = (stock) => {
   const nextOptions = stock.options?.nextFriday || {};
   const followingOptions = stock.options?.followingFriday || {};
   const safeSymbol = escapeHtml(stock.symbol);
+  const symbolLink = `<a href="${etradeQuoteLink(stock.symbol)}" target="_blank" rel="noopener noreferrer">${safeSymbol}</a>`;
   const industry = stock.industry
     ? `<div class="stock-industry"><b>Industry</b><span title="${escapeHtml(stock.industry)}">${escapeHtml(stock.industry)}</span></div>`
     : '';
 
   return `<tr>
-    <td class="stock-cell"><strong>${safeSymbol}</strong><span title="${escapeHtml(stock.name)}">${escapeHtml(stock.name)}</span>${industry}<div class="stock-earnings"><b>Earnings</b>${earningsCell(stock.nextEarnings)}</div></td>
+    <td class="stock-cell"><strong>${symbolLink}</strong><span title="${escapeHtml(stock.name)}">${escapeHtml(stock.name)}</span>${industry}<div class="stock-earnings"><b>Earnings</b>${earningsCell(stock.nextEarnings)}</div></td>
     <td class="price-cell"><span class="negative">${money(stock.price)}</span><small class="negative">${signedMoney(stock.priceChange)} / ${signedPercent(stock.change)}</small>${putYield30Block(stock)}</td>
     <td class="market-cap-cell"><span>${marketCap(stock.marketCap)}</span><small>${marketCapRangeLabel()}</small></td>
     <td class="option-cell">${rowOptions(nextOptions.puts, stock.price)}</td>
