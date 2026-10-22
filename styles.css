@@ -1169,11 +1169,14 @@ tbody tr:last-child td {
 }
 
 .stock-cell strong a {
-  color: inherit;
-  text-decoration: none;
+  color: var(--purple-bright);
+  text-decoration: underline;
+  text-decoration-color: rgba(194, 116, 255, 0.55);
+  text-underline-offset: 3px;
 }
 
 .stock-cell strong a:hover {
+  color: white;
   text-decoration: underline;
 }
 
