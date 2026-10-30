@@ -877,7 +877,7 @@ def fetch_market_losers(
             .get("middle")
         )
 
-    def juice_score(stock):
+    def Hmm_score(stock):
         option = selected_option(stock)
         if not option:
             return float("-inf")
@@ -896,7 +896,7 @@ def fetch_market_losers(
         if selected_option(stock)
         and (selected_option(stock).get("ratio") or 0) > minimum_return_percent
     ]
-    qualifying_stocks.sort(key=juice_score, reverse=True)
+    qualifying_stocks.sort(key=Hmm_score, reverse=True)
     ranked_stocks = qualifying_stocks[:min(limit, 10)]
 
     # A Yahoo earnings fallback downloads an entire quote page. Defer that
