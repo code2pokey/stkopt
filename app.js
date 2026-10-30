@@ -44,8 +44,8 @@ const refreshButton = document.querySelector('#refresh');
 const lastRefresh = document.querySelector('#last-refresh');
 const targetSelect = document.querySelector('#target-select');
 const marketTargetSelect = document.querySelector('#market-target-select');
-const juiceSortSelect = document.querySelector('#juice-sort-select');
-const marketJuiceSortSelect = document.querySelector('#market-juice-sort-select');
+const HmmSortSelect = document.querySelector('#Hmm-sort-select');
+const marketHmmSortSelect = document.querySelector('#market-Hmm-sort-select');
 const marketLosersList = document.querySelector('#market-losers');
 const marketLosersEmpty = document.querySelector('#market-losers-empty');
 const marketLosersEmptyMessage = document.querySelector('#market-losers-empty-message');
@@ -58,8 +58,8 @@ const dropPercentSelect = document.querySelector('#drop-percent-select');
 const storageKey = 'stockoption-watchlist';
 const targetStorageKey = 'stockoption-target-percent';
 const marketTargetStorageKey = 'stockoption-market-target-percent';
-const juiceSortStorageKey = 'stockoption-juice-sort-expiration';
-const marketJuiceSortStorageKey = 'stockoption-market-juice-sort-expiration';
+const HmmSortStorageKey = 'stockoption-Hmm-sort-expiration';
+const marketHmmSortStorageKey = 'stockoption-market-Hmm-sort-expiration';
 const marketCapStorageKey = 'stockoption-minimum-market-cap-billions';
 const maximumMarketCapStorageKey = 'stockoption-maximum-market-cap-billions';
 const dropPercentStorageKey = 'stockoption-minimum-drop-percent';
@@ -83,10 +83,10 @@ let marketTargetPercent = Number(localStorage.getItem(marketTargetStorageKey) ||
 let minimumMarketCapBillions = Number(localStorage.getItem(marketCapStorageKey) || '10');
 let maximumMarketCapBillions = Number(localStorage.getItem(maximumMarketCapStorageKey) || '0');
 let minimumDropPercent = Number(localStorage.getItem(dropPercentStorageKey) || '10');
-let watchlistJuiceSortExpiration = localStorage.getItem(juiceSortStorageKey) === 'followingFriday'
+let watchlistHmmSortExpiration = localStorage.getItem(HmmSortStorageKey) === 'followingFriday'
   ? 'followingFriday'
   : 'nextFriday';
-let marketJuiceSortExpiration = localStorage.getItem(marketJuiceSortStorageKey) === 'followingFriday'
+let marketHmmSortExpiration = localStorage.getItem(marketHmmSortStorageKey) === 'followingFriday'
   ? 'followingFriday'
   : 'nextFriday';
 let requestSequence = 0;
@@ -113,8 +113,8 @@ for (let value = 0.1; value <= 5; value += 0.1) {
 
 targetSelect.value = watchlistTargetPercent.toFixed(2);
 marketTargetSelect.value = marketTargetPercent.toFixed(2);
-juiceSortSelect.value = watchlistJuiceSortExpiration;
-marketJuiceSortSelect.value = marketJuiceSortExpiration;
+HmmSortSelect.value = watchlistHmmSortExpiration;
+marketHmmSortSelect.value = marketHmmSortExpiration;
 marketCapSelect.value = String(minimumMarketCapBillions);
 maximumMarketCapSelect.value = String(maximumMarketCapBillions);
 dropPercentSelect.value = String(minimumDropPercent);
@@ -231,7 +231,7 @@ const strikeDistance = (stockPrice, strike) => {
   return { label: `${Math.abs(percent).toFixed(2)}% ${percent >= 0 ? 'below' : 'above'}` };
 };
 
-const optionJuice = (stock, expirationKey) => {
+const optionHmm = (stock, expirationKey) => {
   const option = stock?.options?.[expirationKey]?.puts?.middle;
   if (!stock?.price || !option?.strike || !option?.premium) return null;
   const premiumYield = option.premium / option.strike;
@@ -240,13 +240,13 @@ const optionJuice = (stock, expirationKey) => {
   return option.strike > stock.price ? -score : score;
 };
 
-const juiceCell = (stock, expirationKey) => {
+const HmmCell = (stock, expirationKey) => {
   const option = stock?.options?.[expirationKey]?.puts?.middle;
-  const juice = optionJuice(stock, expirationKey);
-  if (juice == null) return '<span>—</span><small>No rank</small>';
+  const Hmm = optionHmm(stock, expirationKey);
+  if (Hmm == null) return '<span>—</span><small>No rank</small>';
   const distance = strikeDistance(stock.price, option.strike);
-  const juiceClass = juice < 0 ? 'negative' : '';
-  return `<span class="${juiceClass}">${(juice * 100).toFixed(2)}%</span><small class="${downsideClass(stock.price, option.strike)}">${money(option.premium)} · ${distance.label}</small>`;
+  const HmmClass = Hmm < 0 ? 'negative' : '';
+  return `<span class="${HmmClass}">${(Hmm * 100).toFixed(2)}%</span><small class="${downsideClass(stock.price, option.strike)}">${money(option.premium)} · ${distance.label}</small>`;
 };
 
 const earningsCell = (earnings) => {
@@ -315,11 +315,11 @@ const rowTemplate = (stock) => {
     <td class="stock-cell"><strong>${symbolLink}</strong><span title="${escapeHtml(stock.name)}">${escapeHtml(stock.name)}</span><div class="stock-earnings"><b>Earnings</b>${earningsCell(stock.nextEarnings)}</div></td>
     <td class="price-cell"><span class="${changeClass}">${money(stock.price)}</span><small class="${changeClass}">${signedMoney(stock.priceChange)} / ${signedPercent(stock.change)}</small>${putYield30Block(stock)}</td>
     <td class="option-cell">${rowOptions(nextOptions.puts, stock.price)}</td>
-    <td class="juice-cell">${juiceCell(stock, 'nextFriday')}</td>
+    <td class="Hmm-cell">${HmmCell(stock, 'nextFriday')}</td>
     <td class="option-cell">${rowOptions(followingOptions.puts, stock.price)}</td>
-    <td class="juice-cell">${juiceCell(stock, 'followingFriday')}</td>
-    ${metricGroupCell(stock, [15, 30, 50], watchlistJuiceSortExpiration)}
-    ${metricGroupCell(stock, [90, 120], watchlistJuiceSortExpiration)}
+    <td class="Hmm-cell">${HmmCell(stock, 'followingFriday')}</td>
+    ${metricGroupCell(stock, [15, 30, 50], watchlistHmmSortExpiration)}
+    ${metricGroupCell(stock, [90, 120], watchlistHmmSortExpiration)}
     <td class="remove-cell"><button class="remove" data-symbol="${safeSymbol}" title="Remove ${safeSymbol}" aria-label="Remove ${safeSymbol}">×</button></td>
   </tr>`;
 };
@@ -338,11 +338,11 @@ const marketLoserRowTemplate = (stock) => {
     <td class="price-cell"><span class="negative">${money(stock.price)}</span><small class="negative">${signedMoney(stock.priceChange)} / ${signedPercent(stock.change)}</small>${putYield30Block(stock)}</td>
     <td class="market-cap-cell"><span>${marketCap(stock.marketCap)}</span><small>${marketCapRangeLabel()}</small></td>
     <td class="option-cell">${rowOptions(nextOptions.puts, stock.price)}</td>
-    <td class="juice-cell">${juiceCell(stock, 'nextFriday')}</td>
+    <td class="Hmm-cell">${HmmCell(stock, 'nextFriday')}</td>
     <td class="option-cell">${rowOptions(followingOptions.puts, stock.price)}</td>
-    <td class="juice-cell">${juiceCell(stock, 'followingFriday')}</td>
-    ${metricGroupCell(stock, [15, 30, 50], marketJuiceSortExpiration)}
-    ${metricGroupCell(stock, [90, 120], marketJuiceSortExpiration)}
+    <td class="Hmm-cell">${HmmCell(stock, 'followingFriday')}</td>
+    ${metricGroupCell(stock, [15, 30, 50], marketHmmSortExpiration)}
+    ${metricGroupCell(stock, [90, 120], marketHmmSortExpiration)}
   </tr>`;
 };
 
@@ -353,20 +353,20 @@ function renderLoading(symbol) {
   </tr>`);
 }
 
-function compareByJuice(left, right, expirationKey) {
-  const leftJuice = optionJuice(left, expirationKey);
-  const rightJuice = optionJuice(right, expirationKey);
-  if (leftJuice == null && rightJuice == null) return 0;
-  if (leftJuice == null) return 1;
-  if (rightJuice == null) return -1;
-  return rightJuice - leftJuice;
+function compareByHmm(left, right, expirationKey) {
+  const leftHmm = optionHmm(left, expirationKey);
+  const rightHmm = optionHmm(right, expirationKey);
+  if (leftHmm == null && rightHmm == null) return 0;
+  if (leftHmm == null) return 1;
+  if (rightHmm == null) return -1;
+  return rightHmm - leftHmm;
 }
 
 function renderResults(results) {
   const stocks = results
     .filter((result) => result.data)
     .map((result) => result.data)
-    .sort((left, right) => compareByJuice(left, right, watchlistJuiceSortExpiration));
+    .sort((left, right) => compareByHmm(left, right, watchlistHmmSortExpiration));
   const errors = results.filter((result) => result.error);
 
   list.innerHTML = [
@@ -376,7 +376,7 @@ function renderResults(results) {
 }
 
 function renderMarketLosers(stocks, error = '') {
-  const expirationLabel = marketJuiceSortExpiration === 'followingFriday' ? 'second' : 'first';
+  const expirationLabel = marketHmmSortExpiration === 'followingFriday' ? 'second' : 'first';
   marketLosersEmptyMessage.textContent = `No stocks in the ${marketCapRangeLabel()} market-cap range are currently down more than ${minimumDropPercent}% with a ${expirationLabel}-expiration option return above ${minimumOptionReturnPercent.toFixed(2)}%.`;
   if (error) {
     latestMarketLosers = [];
@@ -389,10 +389,10 @@ function renderMarketLosers(stocks, error = '') {
   latestMarketLosers = [...stocks];
   const rankedStocks = stocks
     .filter((stock) => {
-      const option = stock.options?.[marketJuiceSortExpiration]?.puts?.middle;
+      const option = stock.options?.[marketHmmSortExpiration]?.puts?.middle;
       return option && Number(option.ratio) > minimumOptionReturnPercent;
     })
-    .sort((left, right) => compareByJuice(left, right, marketJuiceSortExpiration))
+    .sort((left, right) => compareByHmm(left, right, marketHmmSortExpiration))
     .slice(0, 10);
   marketLosersList.innerHTML = rankedStocks.map(marketLoserRowTemplate).join('');
   marketLosersEmpty.hidden = rankedStocks.length > 0;
@@ -414,7 +414,7 @@ async function loadMarketLosers() {
     marketCapBillions: String(minimumMarketCapBillions),
     maximumMarketCapBillions: String(maximumMarketCapBillions),
     dropPercent: String(minimumDropPercent),
-    rankExpiration: marketJuiceSortExpiration,
+    rankExpiration: marketHmmSortExpiration,
     minimumReturnPercent: String(minimumOptionReturnPercent),
   });
 
@@ -533,15 +533,15 @@ dropPercentSelect.addEventListener('change', () => {
   loadMarketLosers();
 });
 
-juiceSortSelect.addEventListener('change', () => {
-  watchlistJuiceSortExpiration = juiceSortSelect.value;
-  localStorage.setItem(juiceSortStorageKey, watchlistJuiceSortExpiration);
+HmmSortSelect.addEventListener('change', () => {
+  watchlistHmmSortExpiration = HmmSortSelect.value;
+  localStorage.setItem(HmmSortStorageKey, watchlistHmmSortExpiration);
   if (latestResults.length) renderResults(latestResults);
 });
 
-marketJuiceSortSelect.addEventListener('change', () => {
-  marketJuiceSortExpiration = marketJuiceSortSelect.value;
-  localStorage.setItem(marketJuiceSortStorageKey, marketJuiceSortExpiration);
+marketHmmSortSelect.addEventListener('change', () => {
+  marketHmmSortExpiration = marketHmmSortSelect.value;
+  localStorage.setItem(marketHmmSortStorageKey, marketHmmSortExpiration);
   loadMarketLosers();
 });
 
