@@ -40,7 +40,7 @@
 
   <main id="top" class="shell">
     <div class="section-heading page-intro">
-      <p>Compare put opportunities across the next two expirations using premium yield, downside cushion, earnings timing, and moving-average trends. The Juice score weights premium yield at two-thirds and downside cushion at one-third to support relative ranking. For research and screening only—not financial advice.</p>
+      <p>Compare put opportunities across the next two expirations using premium yield, downside cushion, earnings timing, and moving-average trends. The Hmm score weights premium yield at two-thirds and downside cushion at one-third to support relative ranking. For research and screening only—not financial advice.</p>
     </div>
 
     <section id="watchlist-section" class="watchlist-section">
@@ -58,9 +58,9 @@
             <span>Target premium / strike</span>
             <select id="target-select" aria-label="Target premium to strike percentage"></select>
           </label>
-          <label class="select-control" for="juice-sort-select">
+          <label class="select-control" for="Hmm-sort-select">
             <span>Rank signals by</span>
-            <select id="juice-sort-select" aria-label="Juice column used to sort stocks">
+            <select id="Hmm-sort-select" aria-label="Hmm column used to sort stocks">
               <option value="nextFriday">First expiration</option>
               <option value="followingFriday">Second expiration</option>
             </select>
@@ -87,9 +87,9 @@
                 <th class="stock-head">Stock</th>
                 <th class="price-head">Price</th>
                 <th class="group-head"><span id="next-friday-date"></span><small>Put signal</small></th>
-                <th class="single-head">Juice</th>
+                <th class="single-head">Hmm</th>
                 <th class="group-head"><span id="following-friday-date"></span><small>Put signal</small></th>
-                <th class="single-head">Juice</th>
+                <th class="single-head">Hmm</th>
                 <th class="single-head ma-group-head">MA 15 / 30 / 50</th>
                 <th class="single-head ma-group-head">MA 90 / 120</th>
                 <th class="action-head"><span class="sr-only">Actions</span></th>
@@ -154,9 +154,9 @@
             <span>Target premium / strike</span>
             <select id="market-target-select" aria-label="Daily drop scanner target premium to strike percentage"></select>
           </label>
-          <label class="select-control" for="market-juice-sort-select">
+          <label class="select-control" for="market-Hmm-sort-select">
             <span>Rank signals by</span>
-            <select id="market-juice-sort-select" aria-label="Juice column used to sort the daily drop scanner">
+            <select id="market-Hmm-sort-select" aria-label="Hmm column used to sort the daily drop scanner">
               <option value="nextFriday">First expiration</option>
               <option value="followingFriday">Second expiration</option>
             </select>
@@ -167,7 +167,7 @@
 
       <div class="market-losers-meta">
         <span id="market-losers-count">Scanning market...</span>
-        <span>Return &gt; 0.80% · ranked by selected Juice expiration</span>
+        <span>Return &gt; 0.80% · ranked by selected Hmm expiration</span>
       </div>
 
       <div id="market-losers-shell" class="table-shell" aria-busy="true">
@@ -183,9 +183,9 @@
                 <th class="price-head">Price</th>
                 <th class="single-head">Market cap</th>
                 <th class="group-head"><span id="losers-next-friday-date"></span><small>Put signal</small></th>
-                <th class="single-head">Juice</th>
+                <th class="single-head">Hmm</th>
                 <th class="group-head"><span id="losers-following-friday-date"></span><small>Put signal</small></th>
-                <th class="single-head">Juice</th>
+                <th class="single-head">Hmm</th>
                 <th class="single-head ma-group-head">MA 15 / 30 / 50</th>
                 <th class="single-head ma-group-head">MA 90 / 120</th>
               </tr>
