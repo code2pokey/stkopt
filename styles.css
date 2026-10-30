@@ -854,6 +854,7 @@ footer {
   max-width: 760px;
 }
 
+
 .control-deck {
   display: grid;
   grid-template-columns: auto 1fr auto;
@@ -1266,7 +1267,7 @@ tbody tr:last-child td {
 
 .price-cell,
 .market-cap-cell,
-.juice-cell,
+.Hmm-cell,
 .metric-cell {
   padding: 18px 13px;
   vertical-align: top;
@@ -1276,7 +1277,7 @@ tbody tr:last-child td {
 
 .price-cell > span,
 .market-cap-cell > span,
-.juice-cell > span,
+.Hmm-cell > span,
 .metric-cell > span {
   display: inline-block;
   padding: 3px 5px;
@@ -1285,7 +1286,7 @@ tbody tr:last-child td {
 
 .price-cell small,
 .market-cap-cell small,
-.juice-cell small,
+.Hmm-cell small,
 .metric-cell small {
   display: block;
   max-width: 150px;
@@ -1432,7 +1433,7 @@ tbody tr:last-child td {
   font: 9px var(--font-mono);
 }
 
-.juice-cell > span {
+.Hmm-cell > span {
   color: var(--purple-bright);
   background: rgba(165, 77, 255, 0.1);
 }
