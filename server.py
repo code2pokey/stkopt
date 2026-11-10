@@ -4,6 +4,7 @@ import io
 import json
 import os
 import re
+import subprocess
 import threading
 import time
 import urllib.parse
@@ -389,12 +390,32 @@ def uncached_nasdaq_option_rows(symbol, expiration_dates):
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Connection": "keep-alive",
         "Origin": "https://www.nasdaq.com",
         "Referer": "https://www.nasdaq.com/",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-site",
     }
     request = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(request, timeout=15) as response:
-        payload = json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        if error.code != 403:
+            raise
+        # Nasdaq rejects urllib's TLS/client fingerprint in some environments;
+        # curl uses the same browser-facing endpoint and is available alongside
+        # the local development server on Windows.
+        curl_headers = [item for pair in headers.items() for item in ("-H", f"{pair[0]}: {pair[1]}")]
+        result = subprocess.run(
+            ["curl.exe", "--fail", "--silent", "--show-error", "--location", *curl_headers, url],
+            check=True,
+            capture_output=True,
+            timeout=20,
+        )
+        payload = json.loads(result.stdout.decode("utf-8"))
 
     data = payload.get("data") or {}
     rows = (data.get("table") or {}).get("rows") or []
