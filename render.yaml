@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: stkopt
+    runtime: python
+    buildCommand: ""
+    startCommand: "python stkopt-main/server.py"
+    healthCheckPath: /
