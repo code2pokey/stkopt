@@ -4,6 +4,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import threading
 import time
@@ -408,9 +409,12 @@ def uncached_nasdaq_option_rows(symbol, expiration_dates):
         # Nasdaq rejects urllib's TLS/client fingerprint in some environments;
         # curl uses the same browser-facing endpoint and is available alongside
         # the local development server on Windows.
+        curl_command = shutil.which("curl.exe") or shutil.which("curl")
+        if not curl_command:
+            raise RuntimeError("Neither urllib nor curl could access Nasdaq option data") from error
         curl_headers = [item for pair in headers.items() for item in ("-H", f"{pair[0]}: {pair[1]}")]
         result = subprocess.run(
-            ["curl.exe", "--fail", "--silent", "--show-error", "--location", *curl_headers, url],
+            [curl_command, "--fail", "--silent", "--show-error", "--location", *curl_headers, url],
             check=True,
             capture_output=True,
             timeout=20,
